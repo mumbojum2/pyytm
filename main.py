@@ -134,6 +134,45 @@ def get_youtube_suggestions(query):
     except:
         return []
 
+def get_views(api, query):
+    """Searches for a track or video and prints the views count."""
+    print(f"Searching for '{query}'...")
+    try:
+        # Search for videos, as they reliably contain view counts
+        results = api.search(query, filter='videos', limit=1)
+
+        if not results:
+            print(f"No results found for query: '{query}'.")
+            return 0
+
+        # Get the first result
+        item = results[0]
+        
+        title = item.get('title', 'N/A')
+        artists = ', '.join([artist['name'] for artist in item.get('artists', []) if 'name' in artist])
+        views = item.get('views', 'View count not available')
+        
+        print("\n--- Top Search Result Details ---")
+        print(f"Title: {title}")
+        print(f"Artist(s): {artists}")
+        print(f"Views: {views}")
+        print("-" * 35)
+        
+        # Return the views count as integer if possible
+        if isinstance(views, str):
+            # Remove non-numeric characters and convert to int
+            views = re.sub(r'[^\d]', '', views)
+            return int(views) if views else 0
+        elif isinstance(views, int):
+            return views
+        else:
+            return 0
+
+    except Exception as e:
+        print(f"\nAn error occurred while fetching view data.")
+        print(f"Detailed Error: {e}")
+        return 0
+
 def get_personalized_recommendations():
     """Get personalized recommendations using browser.json"""
     global browser_json_content, user_authenticated
@@ -335,7 +374,7 @@ def fast_youtube_search(query, max_results=10):
                     if song.get('thumbnails'):
                         thumbnail_url = song['thumbnails'][-1]['url'] if len(song['thumbnails']) > 1 else song['thumbnails'][0]['url']
                     
-                    # Get actual view count
+                    # Get actual view count using the new function
                     views = get_accurate_views(video_id)
                     
                     songs.append({
@@ -409,7 +448,7 @@ def fast_youtube_search(query, max_results=10):
         return {'songs': [], 'artists': [], 'albums': []}
 
 def get_accurate_views(video_id):
-    """Get actual view count from YouTube"""
+    """Get actual view count from YouTube using the new function"""
     print(f"🔍 Getting views for: {video_id}")
     if not video_id:
         return 0
@@ -417,31 +456,30 @@ def get_accurate_views(video_id):
     try:
         from ytmusicapi import YTMusic
         yt = YTMusic()
-        song_details = yt.get_song(video_id)
         
-        # Try multiple possible locations for view count
-        view_count = song_details.get('videoDetails', {}).get('viewCount')
-        if not view_count:
-            view_count = song_details.get('viewCount')
-        if not view_count:
-            # Try to find in tracking params or other fields
-            for key, value in song_details.items():
-                if 'view' in key.lower() and isinstance(value, (int, str)):
-                    view_count = value
-                    break
+        # Use the new get_views function approach
+        # Search for the video to get view count
+        search_results = yt.search(video_id, filter='videos', limit=1)
         
-        print(f"📊 Raw view count: {view_count}")
-        
-        if view_count:
-            # Convert to integer, handling string formats
-            if isinstance(view_count, str):
-                # Remove commas and non-numeric characters
-                view_count = re.sub(r'[^\d]', '', view_count)
-            result = int(view_count) if view_count else 0
-            print(f"🎯 Processed view count: {result}")
-            return result
+        if search_results:
+            item = search_results[0]
+            views = item.get('views', 0)
+            
+            print(f"📊 Raw view count: {views}")
+            
+            if views:
+                # Convert to integer, handling string formats
+                if isinstance(views, str):
+                    # Remove commas and non-numeric characters
+                    views = re.sub(r'[^\d]', '', views)
+                result = int(views) if views else 0
+                print(f"🎯 Processed view count: {result}")
+                return result
+            else:
+                print("❌ No view count found")
+                return 0
         else:
-            print("❌ No view count found")
+            print("❌ No search results found for video")
             return 0
             
     except Exception as e:
@@ -738,9 +776,10 @@ def download():
         filename = f"{safe_artist} - {safe_title}" if safe_artist != "Unknown" else safe_title
         filename = filename[:100]
         
-        output_template = os.path.join('downloads', f'{filename}.%(ext)s')
+        # Download directly as MP3 with proper filename
+        output_template = os.path.join('downloads', f'{filename}.mp3')
         
-        # Download with metadata - REMOVED COOKIES
+        # Download with metadata - force MP3 format - KEEP COOKIES PARAMETER
         cmd = [
             sys.executable, '-m', 'yt_dlp',
             '-x', '--audio-format', 'mp3',
@@ -752,7 +791,7 @@ def download():
             '-o', output_template,
             '--no-warnings',
             '--quiet',
-            '--cookies', 'cookies.txt',
+            '--cookies', 'cookies.txt',  # KEEP THIS LINE - uses external cookies file
             url
         ]
 
@@ -764,16 +803,10 @@ def download():
             time.sleep(1)
             
             # Find the downloaded file
-            download_files = []
-            for ext in ['.mp3', '.m4a']:
-                potential_files = [f for f in os.listdir('downloads') 
-                                if f.startswith(filename) and f.endswith(ext)]
-                download_files.extend(potential_files)
+            downloaded_file = f"{filename}.mp3"
+            filepath = os.path.join('downloads', downloaded_file)
             
-            if download_files:
-                actual_filename = download_files[0]
-                filepath = os.path.join('downloads', actual_filename)
-                
+            if os.path.exists(filepath):
                 # Enhance metadata
                 add_metadata_to_file(filepath, title, artist, album, thumbnail)
                 
@@ -782,7 +815,7 @@ def download():
                     'title': title,
                     'artist': artist,
                     'album': album,
-                    'filename': actual_filename,
+                    'filename': downloaded_file,
                     'filepath': filepath,
                     'downloadedAt': time.strftime('%Y-%m-%d %H:%M:%S')
                 }
@@ -795,8 +828,10 @@ def download():
                     artists_db[artist] = 1
                 
                 save_user_data()
-                    
-                return jsonify({'success': True, 'song': song_info})
+                
+                # Return the file for immediate download
+                download_name = f"{safe_artist} - {safe_title}.mp3"
+                return send_file(filepath, as_attachment=True, download_name=download_name)
             else:
                 print(f"❌ Downloaded file not found for: {title}")
                 return jsonify({'error': 'Downloaded file not found'}), 500
@@ -868,4 +903,3 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
