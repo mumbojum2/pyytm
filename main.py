@@ -211,7 +211,6 @@ def download():
     if not video_id:
         return jsonify({'error': 'No videoId provided'}), 400
 
-    # Sanitize filename
     sanitized_title = "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip()
     sanitized_artist = "".join(c for c in artist if c.isalnum() or c in (" ", "-", "_")).strip()
     filename = f"{sanitized_artist} - {sanitized_title}_{video_id}.mp3"
@@ -220,17 +219,17 @@ def download():
     # Check if file exists (cache hit)
     if os.path.exists(file_path):
         print(f"✅ Cache hit for {filename}")
-        # Update metadata if needed
-        add_metadata(file_path, title, artist, album, thumbnail_url)
-        user_data['songs'].append({
+        add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
+        songs_db.append({
             'id': video_id,
             'title': title,
             'artist': artist,
             'album': album,
+            'filename': filename,
             'thumbnail': thumbnail_url,
-            'downloadedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            'downloaded_at': time.strftime('%Y-%m-%d %H:%M:%S')
         })
-        user_data['artists'][artist] = user_data['artists'].get(artist, 0) + 1
+        artists_db[artist] = artists_db.get(artist, 0) + 1
         save_user_data()
         return jsonify({
             'status': 'success',
@@ -242,7 +241,7 @@ def download():
     ydl_opts = {
         'format': 'bestaudio[ext=mp3]',
         'outtmpl': file_path,
-        'cookiefile': COOKIES_FILE,
+        'cookiefile': os.path.join(BASE_DIR, 'cookies.txt'),
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
@@ -255,18 +254,19 @@ def download():
         print(f"✅ Downloaded {filename}")
 
         # Add metadata and thumbnail
-        add_metadata(file_path, title, artist, album, thumbnail_url)
+        add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
 
         # Update user data
-        user_data['songs'].append({
+        songs_db.append({
             'id': video_id,
             'title': title,
             'artist': artist,
             'album': album,
+            'filename': filename,
             'thumbnail': thumbnail_url,
-            'downloadedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            'downloaded_at': time.strftime('%Y-%m-%d %H:%M:%S')
         })
-        user_data['artists'][artist] = user_data['artists'].get(artist, 0) + 1
+        artists_db[artist] = artists_db.get(artist, 0) + 1
         save_user_data()
 
         return jsonify({
