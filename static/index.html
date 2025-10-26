@@ -155,47 +155,67 @@
             };
 
             // FIXED: Faster suggestions with better error handling
-            const fetchSuggestions = async () => {
-                if (!searchQuery.trim() || searchQuery.length < 2) {
-                    setSuggestions([]);
-                    setShowSuggestions(false);
-                    return;
-                }
+            // FIXED: Better suggestions with proper filtering
+const fetchSuggestions = async () => {
+    if (!searchQuery.trim() || searchQuery.length < 2) {
+        setSuggestions([]);
+        setShowSuggestions(false);
+        return;
+    }
 
-                try {
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5 second timeout
+    try {
+        const response = await fetch(`${API_BASE}/api/suggestions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: searchQuery })
+        });
 
-                    const response = await fetch(`${API_BASE}/api/suggestions`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ query: searchQuery }),
-                        signal: controller.signal
-                    });
-
-                    clearTimeout(timeoutId);
-
-                    if (response.ok) {
-                        const data = await response.json();
-                        // Filter out any suggestions with strange numbers at the end
-                        const cleanSuggestions = (data.suggestions || [])
-                            .filter(suggestion => suggestion && typeof suggestion === 'string')
-                            .map(suggestion => suggestion.replace(/\d{8,}$/, '').trim()) // Remove trailing long numbers
-                            .filter(suggestion => suggestion.length > 0)
-                            .slice(0, 5);
-                        
-                        setSuggestions(cleanSuggestions);
-                        setShowSuggestions(cleanSuggestions.length > 0);
-                    }
-                } catch (error) {
-                    if (error.name !== 'AbortError') {
-                        console.error('Suggestions error:', error);
-                    }
-                    setSuggestions([]);
-                    setShowSuggestions(false);
-                }
-            };
-
+        if (response.ok) {
+            const data = await response.json();
+            console.log('🔍 Raw suggestions:', data.suggestions); // Debug log
+            
+            // More lenient filtering - only remove obviously invalid suggestions
+            const cleanSuggestions = (data.suggestions || [])
+                .filter(suggestion => {
+                    if (!suggestion || typeof suggestion !== 'string') return false;
+                    
+                    // Remove suggestions that are just numbers or have weird patterns
+                    const cleanSuggestion = suggestion.trim();
+                    if (cleanSuggestion.length === 0) return false;
+                    if (/^\d+$/.test(cleanSuggestion)) return false; // Only numbers
+                    if (cleanSuggestion.length > 100) return false; // Too long
+                    
+                    return true;
+                })
+                .map(suggestion => {
+                    // Clean up the suggestion text
+                    let clean = suggestion.trim();
+                    
+                    // Remove common trailing garbage patterns more carefully
+                    clean = clean
+                        .replace(/\s+\d{8,}$/, '') // Remove trailing long numbers with space
+                        .replace(/[<>:"/\\|?*]+$/, '') // Remove trailing invalid filename chars
+                        .trim();
+                    
+                    return clean;
+                })
+                .filter(suggestion => suggestion.length > 0 && suggestion.length < 80)
+                .slice(0, 5);
+            
+            console.log('✅ Clean suggestions:', cleanSuggestions); // Debug log
+            
+            setSuggestions(cleanSuggestions);
+            setShowSuggestions(cleanSuggestions.length > 0);
+        } else {
+            setSuggestions([]);
+            setShowSuggestions(false);
+        }
+    } catch (error) {
+        console.error('Suggestions error:', error);
+        setSuggestions([]);
+        setShowSuggestions(false);
+    }
+};
             const handleSearch = async (query = searchQuery) => {
                 const searchTerm = query.trim();
                 if (!searchTerm) {
@@ -956,3 +976,4 @@
     </script>
 </body>
 </html>
+
