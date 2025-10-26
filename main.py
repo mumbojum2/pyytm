@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
-import yt_dlp
+import yt-dlp
 from ytmusicapi import YTMusic
 import requests
 from mutagen.mp3 import MP3
@@ -265,7 +265,7 @@ def download():
         })
 
     # Download with yt-dlp
-    ydl_opts = {
+    ydl-opts = {
         'format': 'bestaudio[ext=mp3]',
         'outtmpl': file_path,
         'cookiefile': os.path.join(BASE_DIR, 'cookies.txt'),
@@ -276,7 +276,7 @@ def download():
     }
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt-dlp.YoutubeDL(ydl-opts) as ydl:
             ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
         print(f"✅ Downloaded {filename}")
 
