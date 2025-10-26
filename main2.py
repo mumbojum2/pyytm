@@ -524,6 +524,20 @@ def proxy_audio():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# FIXED: Add the missing play-song route
+@app.route('/api/play-song/<song_id>')
+def play_song(song_id):
+    """Serve song file for playback"""
+    song = next((s for s in songs_db if s['id'] == song_id), None)
+    if not song:
+        return jsonify({'error': 'Song not found'}), 404
+        
+    filepath = os.path.join('/home/akiva/pyytm/downloads', song['filename'])
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
+        
+    return send_file(filepath)
+
 @app.route('/api/download', methods=['POST'])
 def download():
     data = request.get_json()
@@ -634,9 +648,9 @@ def serve_download(filename):
     
     return send_file(filepath, as_attachment=True, download_name=filename)
 
-@app.route('/api/play-song/<song_id>')
-def play_song(song_id):
-    """Serve song file for playback"""
+@app.route('/api/download-file/<song_id>')
+def download_file(song_id):
+    """Download song to computer"""
     song = next((s for s in songs_db if s['id'] == song_id), None)
     if not song:
         return jsonify({'error': 'Song not found'}), 404
@@ -645,7 +659,9 @@ def play_song(song_id):
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 404
         
-    return send_file(filepath)
+    download_name = f"{sanitize_filename(song['artist'])} - {sanitize_filename(song['title'])}.mp3"
+    
+    return send_file(filepath, as_attachment=True, download_name=download_name)
 
 def format_views(views):
     if not views or views == 0:
