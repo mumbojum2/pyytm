@@ -1,7 +1,3 @@
-# Netscape HTTP Cookie File
-# https://curl.haxx.se/rfc/cookie_spec.html
-# This is a generated file! Do not edit.
-
 .youtube.com	TRUE	/	TRUE	1796006235	PREF	tz=America.New_York&f5=20000&f7=100&repeat=NONE&autoplay=true&f6=40000000
 .youtube.com	TRUE	/	FALSE	0	wide	1
 .youtube.com	TRUE	/	FALSE	1795888619	SID	g.a0002wgJ8ZApcUjAXZpfWhErhgPgTnlys5HmyOVO7KAKZIZEUiMJqi-tLfnsc5K_YIxzwlo9kgACgYKAZUSARASFQHGX2MiBEWlRunA6_FZvzVNyPbIdBoVAUF8yKrYl82Mcx18-sjBqYieVK3e0076
