@@ -23,6 +23,20 @@
         .progress-fill { height: 100%; background: #10b981; transition: width 0.1s ease; }
         .play-button-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.3); border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease; }
         .play-button-overlay:hover { opacity: 1; }
+        .suggestions-dropdown {
+    position: absolute;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 1rem;
+    margin-top: 0.5rem;
+    padding: 0.5rem 0;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    z-index: 1000;
+    max-height: 300px;
+    overflow-y: auto;
+}
     </style>
 </head>
 <body class="gradient-bg min-h-screen">
@@ -153,43 +167,56 @@
             };
 
             // FIXED: Simple suggestions without aggressive filtering
-            const fetchSuggestions = async () => {
-                if (!searchQuery.trim() || searchQuery.length < 2) {
-                    setSuggestions([]);
-                    setShowSuggestions(false);
-                    return;
-                }
+            // DEBUG VERSION - Replace your fetchSuggestions function with this
+const fetchSuggestions = async () => {
+    console.log('🔄 fetchSuggestions called with:', searchQuery);
+    
+    if (!searchQuery.trim() || searchQuery.length < 2) {
+        console.log('❌ Query too short');
+        setSuggestions([]);
+        setShowSuggestions(false);
+        return;
+    }
 
-                try {
-                    const response = await fetch(`${API_BASE}/api/suggestions`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ query: searchQuery })
-                    });
+    try {
+        console.log('📡 Fetching suggestions from API...');
+        const response = await fetch(`${API_BASE}/api/suggestions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: searchQuery })
+        });
 
-                    if (response.ok) {
-                        const data = await response.json();
-                        
-                        // SIMPLE FILTERING - just take the first 5 valid suggestions
-                        const cleanSuggestions = (data.suggestions || [])
-                            .filter(suggestion => suggestion && typeof suggestion === 'string')
-                            .map(suggestion => suggestion.trim())
-                            .filter(suggestion => suggestion.length > 0)
-                            .slice(0, 5);
-                        
-                        console.log('🎯 Suggestions to display:', cleanSuggestions);
-                        setSuggestions(cleanSuggestions);
-                        setShowSuggestions(cleanSuggestions.length > 0);
-                    } else {
-                        setSuggestions([]);
-                        setShowSuggestions(false);
-                    }
-                } catch (error) {
-                    console.error('Suggestions error:', error);
-                    setSuggestions([]);
-                    setShowSuggestions(false);
-                }
-            };
+        console.log('✅ API response status:', response.status);
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('🔍 Full API response data:', data);
+            console.log('🎯 Raw suggestions array:', data.suggestions);
+            console.log('📊 Suggestions type:', typeof data.suggestions);
+            console.log('🔢 Suggestions length:', data.suggestions ? data.suggestions.length : 0);
+            
+            if (data.suggestions && Array.isArray(data.suggestions)) {
+                console.log('📝 First few suggestions:', data.suggestions.slice(0, 3));
+            }
+            
+            // EXTREMELY simple filtering - just show whatever we get
+            const suggestions = Array.isArray(data.suggestions) ? data.suggestions.slice(0, 5) : [];
+            
+            console.log('🎯 Final suggestions to display:', suggestions);
+            
+            setSuggestions(suggestions);
+            setShowSuggestions(suggestions.length > 0);
+        } else {
+            console.log('❌ API response not OK');
+            setSuggestions([]);
+            setShowSuggestions(false);
+        }
+    } catch (error) {
+        console.error('💥 Suggestions error:', error);
+        setSuggestions([]);
+        setShowSuggestions(false);
+    }
+};
 
             const handleSearch = async (query = searchQuery) => {
                 const searchTerm = query.trim();
@@ -566,24 +593,24 @@
                                             </div>
                                         </div>
 
-                                        {/* Search Suggestions - FIXED: Now shows properly */}
-                                        {showSuggestions && suggestions.length > 0 && (
-                                            <div className="absolute w-full bg-white/95 rounded-2xl shadow-2xl mt-2 py-2 z-50 border border-white/20 backdrop-blur-sm fade-in">
-                                                {suggestions.map((suggestion, idx) => (
-                                                    <button
-                                                        key={idx}
-                                                        onClick={() => {
-                                                            setSearchQuery(suggestion);
-                                                            handleSearch(suggestion);
-                                                        }}
-                                                        className="w-full px-6 py-3 text-left hover:bg-purple-50 flex items-center gap-3 transition-colors"
-                                                    >
-                                                        <i className="fas fa-search text-purple-500"></i>
-                                                        <span className="text-gray-700 truncate">{suggestion}</span>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
+{/* Search Suggestions - UPDATED */}
+{showSuggestions && suggestions.length > 0 && (
+    <div className="suggestions-dropdown">
+        {suggestions.map((suggestion, idx) => (
+            <button
+                key={idx}
+                onClick={() => {
+                    setSearchQuery(suggestion);
+                    handleSearch(suggestion);
+                }}
+                className="w-full px-6 py-3 text-left hover:bg-purple-50 flex items-center gap-3 transition-colors"
+            >
+                <i className="fas fa-search text-purple-500"></i>
+                <span className="text-gray-700 truncate">{suggestion}</span>
+            </button>
+        ))}
+    </div>
+)}
                                     </div>
                                 </div>
 
@@ -899,3 +926,4 @@
     </script>
 </body>
 </html>
+
