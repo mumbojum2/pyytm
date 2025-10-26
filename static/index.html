@@ -157,7 +157,6 @@
             };
 
             const checkAuthentication = async () => {
-                // Check if user was previously authenticated
                 const savedAuth = localStorage.getItem('userAuthenticated');
                 if (savedAuth === 'true') {
                     setUserAuthenticated(true);
@@ -230,37 +229,40 @@
 
             const handleDownload = async (song) => {
                 setDownloading(song.id);
+                console.log('Download payload:', {
+                    videoId: song.id,
+                    title: song.title,
+                    artist: song.artist,
+                    album: song.album || '',
+                    thumbnail: song.thumbnail || ''
+                }); // Debug payload
                 try {
                     const response = await fetch(`${API_BASE}/api/download`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            url: song.url,
+                            videoId: song.id, // Changed from url to videoId
                             title: song.title,
                             artist: song.artist,
-                            album: song.album,
-                            thumbnail: song.thumbnail
+                            album: song.album || '',
+                            thumbnail: song.thumbnail || ''
                         })
                     });
 
-                    if (response.ok) {
-                        // Direct file response, trigger download
-                        const blob = await response.blob();
-                        const url = window.URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.style.display = 'none';
-                        a.href = url;
-                        a.download = `${song.artist} - ${song.title}.mp3`.replace(/[<>:"/\\|?*]/g, '');
-                        document.body.appendChild(a);
-                        a.click();
-                        window.URL.revokeObjectURL(url);
-                        document.body.removeChild(a);
+                    const data = await response.json();
+                    if (response.ok && data.status === 'success') {
+                        // Trigger download using downloadUrl
+                        const link = document.createElement('a');
+                        link.href = `${API_BASE}${data.downloadUrl}`;
+                        link.download = data.filename;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
                         
                         showMessage(`✅ "${song.title}" downloaded!`, 'success');
                         await loadSongs();
                         await loadArtists();
                     } else {
-                        const data = await response.json();
                         throw new Error(data.error || 'Download failed');
                     }
                 } catch (error) {
@@ -279,16 +281,12 @@
                         const a = document.createElement('a');
                         a.style.display = 'none';
                         a.href = url;
-                        
-                        // Get filename from response headers or create one
                         const song = songs.find(s => s.id === songId) || { artist: 'Unknown', title: 'Unknown' };
-                        a.download = `${song.artist} - ${song.title}.mp3`.replace(/[<>:"/\\|?*]/g, '');
-                        
+                        a.download = `${song.artist} - ${song.title}.m4a`.replace(/[<>:"/\\|?*]/g, '');
                         document.body.appendChild(a);
                         a.click();
                         window.URL.revokeObjectURL(url);
                         document.body.removeChild(a);
-                        
                         showMessage('📥 Song saved to your computer!', 'success');
                     }
                 } catch (error) {
@@ -300,11 +298,8 @@
                 try {
                     const song = songs.find(s => s.id === songId);
                     if (!song) return;
-                    
                     const audioUrl = `${API_BASE}/api/play-song/${songId}`;
                     setNowPlaying({ ...song, audioUrl });
-                    
-                    // Load audio element
                     if (audioRef.current) {
                         audioRef.current.src = audioUrl;
                         audioRef.current.load();
@@ -399,7 +394,6 @@
                     showMessage(`❌ ${error.message}`, 'error');
                 }
                 
-                // Reset file input
                 event.target.value = '';
             };
 
@@ -691,7 +685,7 @@
                                                         decoding="async"
                                                         className="w-full aspect-square object-cover rounded-xl"
                                                         onError={(e) => {
-                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMTAwIDEzMEwxMjAgMTEwTDEwMCA5MEw4MCAxMTBMMTAwIDEzMFoiIGZpbGw9IiM4RThFOEUiLz48cGF0aCBkPSJNODAgMTQwTDEyMCAxNDBMMTIwIDgwTDgwIDgwTDgwIDE0MFoiIGZpbGw9IiM4RThFOEUiLz48L3N2Zz4=';
+                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMTAwIDEzNEwxMjAgMTE0TDEwMCA5NEw4MCAxMTBMMTAwIDEzNFoiIGZpbGw9IiM4RThFOEUiLz48cGF0aCBkPSJNODAgMTQ0TDEyMCAxNDBMMTIwIDg0TDgwIDg0TDgwIDE0NFoiIGZpbGw9IiM4RThFOEUiLz48L3N2Zz4=';
                                                         }}
                                                     />
                                                     <div className="absolute inset-0 bg-black/20 rounded-xl flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
@@ -757,7 +751,7 @@
                                                                 decoding="async"
                                                                 className="w-full aspect-square object-cover rounded-xl mb-3"
                                                                 onError={(e) => {
-                                                                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMTAwIDEzMEwxMjAgMTEwTDEwMCA5MEw4MCAxMTBMMTAwIDEzMFoiIGZpbGw9IiM4RThFOEUiLz48cGF0aCBkPSJNODAgMTQwTDEyMCAxNDBMMTIwIDgwTDgwIDgwTDgwIDE0MFoiIGZpbGw9IiM4RThFOEUiLz48L3N2Zz4=';
+                                                                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMTAwIDEzNEwxMjAgMTE0TDEwMCA5NEw4MCAxMTBMMTAwIDEzNFoiIGZpbGw9IiM4RThFOEUiLz48cGF0aCBkPSJNODAgMTQ0TDEyMCAxNDBMMTIwIDg0TDgwIDg0TDgwIDE0NFoiIGZpbGw9IiM4RThFOEUiLz48L3N2Zz4=';
                                                                 }}
                                                             />
                                                             <h3 className="font-semibold text-white text-sm mb-1 truncate">{album.title}</h3>
@@ -1042,7 +1036,7 @@
                                                         decoding="async"
                                                         className="w-12 h-12 rounded-lg object-cover"
                                                         onError={(e) => {
-                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
+                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA4OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
                                                         }}
                                                     />
                                                     <div className="flex-1">
@@ -1155,7 +1149,7 @@
                                                         decoding="async"
                                                         className="w-12 h-12 rounded-lg object-cover"
                                                         onError={(e) => {
-                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
+                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI4TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
                                                         }}
                                                     />
                                                 </div>
@@ -1164,11 +1158,9 @@
                                                     <h3 className="font-semibold text-white text-base mb-1">
                                                         {song.title}
                                                     </h3>
-                                                    
                                                     <div className="text-sm text-white/70 mb-1">
                                                         {song.album && <span>Album: {song.album}</span>}
                                                     </div>
-                                                    
                                                     <div className="flex items-center gap-3 text-xs text-white/60">
                                                         <span>Duration: {song.duration}</span>
                                                         <span>•</span>
@@ -1200,7 +1192,7 @@
                                                             )}
                                                         </button>
                                                     )}
-                                                    {'filepath' in song && (
+                                                    {'filename' in song && (
                                                         <>
                                                             <button
                                                                 onClick={() => playSong(song.id)}
