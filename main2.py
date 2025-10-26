@@ -76,28 +76,32 @@ def sanitize_filename(filename):
     return re.sub(r'[<>:"/\\|?*]', '', filename)
 
 def get_youtube_suggestions(query):
-    if not query or len(query) < 1:
+    """Get YouTube search suggestions - WORKING VERSION"""
+    if not query or len(query) < 2:
         return []
-
-    url = "https://suggestqueries.google.com/complete/search"
-    params = {"client": "youtube", "ds": "yt", "q": query, "hl": "en"}
 
     try:
-        response = requests.get(url, params=params, timeout=1.0)
-        text = response.text
-        start = text.find('[')
-        end = text.rfind(']')
-        if start == -1 or end == -1:
-            return []
-        json_text = text[start:end+1]
-        data = json.loads(json_text)
-        suggestions = [item[0] for item in data[1]] if len(data) > 1 else []
-        return suggestions[:5]
-    except:
-        return []
+        url = "https://suggestqueries.google.com/complete/search"
+        params = {
+            "client": "youtube",
+            "hl": "en",
+            "ds": "yt",
+            "q": query
+        }
+        
+        response = requests.get(url, params=params, timeout=2)
+        if response.status_code == 200:
+            # Parse the JSONP response
+            data = json.loads(response.text[response.text.find('['):response.text.rfind(']')+1])
+            if len(data) > 1:
+                return data[1][:8]  # Return first 8 suggestions
+    except Exception as e:
+        print(f"Suggestions error: {e}")
+    
+    return []
 
 def parse_view_count(view_str):
-    """Parse view count string into integer - IMPROVED"""
+    """Parse view count string into integer - SIMPLIFIED"""
     if not view_str:
         return 0
     
@@ -105,27 +109,31 @@ def parse_view_count(view_str):
         # Clean the string
         view_str = str(view_str).strip().upper().replace(',', '').replace(' ', '')
         
-        # Handle "No views" or empty
-        if not view_str or view_str in ['', 'NO VIEWS']:
+        # Return 0 if empty or "No views"
+        if not view_str or 'NO' in view_str:
             return 0
             
         # Handle numeric strings
         if view_str.isdigit():
             return int(view_str)
         
-        # Handle formatted numbers (1.2K, 3.4M, 5.6B)
-        multipliers = {'K': 1000, 'M': 1000000, 'B': 1000000000}
-        
-        for suffix, multiplier in multipliers.items():
-            if suffix in view_str:
-                # Extract the number part including decimals
-                num_part = re.sub(r'[^\d.]', '', view_str)
-                if num_part:
-                    return int(float(num_part) * multiplier)
-        
-        # If no multiplier found, try to extract just numbers
-        numbers_only = re.sub(r'[^\d]', '', view_str)
-        return int(numbers_only) if numbers_only else 0
+        # Handle K, M, B suffixes
+        if 'K' in view_str:
+            num = float(re.sub(r'[^\d.]', '', view_str))
+            return int(num * 1000)
+        elif 'M' in view_str:
+            num = float(re.sub(r'[^\d.]', '', view_str))
+            return int(num * 1000000)
+        elif 'B' in view_str:
+            num = float(re.sub(r'[^\d.]', '', view_str))
+            return int(num * 1000000000)
+            
+        # Try to extract any numbers
+        numbers = re.findall(r'\d+', view_str)
+        if numbers:
+            return int(''.join(numbers))
+            
+        return 0
         
     except Exception as e:
         print(f"View count parsing error for '{view_str}': {e}")
@@ -177,52 +185,32 @@ def get_popular_recommendations():
         from ytmusicapi import YTMusic
         yt = YTMusic()
         
-        charts = yt.get_charts(country='US') or {}
+        # Get trending music directly
+        search_results = yt.search('trending music', filter='songs', limit=12)
         recommendations = []
         
-        charts_list = charts.get('charts', [])
-        if not charts_list:
-            return get_fallback_recommendations()
-            
-        songs_chart = None
-        for chart in charts_list:
-            if chart.get('title') in ['Top songs', 'Trending']:
-                songs_chart = chart
-                break
-        
-        if songs_chart:
-            items = songs_chart.get('items', [])
-            for track in items[:12]:
-                try:
-                    video_id = track.get('videoId')
-                    if video_id:
-                        artists_list = track.get('artists', [])
-                        artist_names = []
-                        for artist in artists_list:
-                            if isinstance(artist, dict) and 'name' in artist:
-                                artist_names.append(artist['name'])
-                        
-                        artist_str = ", ".join(artist_names) if artist_names else 'Unknown Artist'
-                        
-                        thumbnails = track.get('thumbnails', [])
-                        thumbnail_url = ""
-                        if thumbnails:
-                            thumbnail_url = thumbnails[-1].get('url', '') if len(thumbnails) > 1 else thumbnails[0].get('url', '')
-                        
-                        recommendations.append({
-                            'id': video_id,
-                            'title': track.get('title', 'Unknown Track'),
-                            'artist': artist_str,
-                            'thumbnail': thumbnail_url,
-                            'type': 'song',
-                            'url': f"https://www.youtube.com/watch?v={video_id}",
-                            'views': 'Popular'
-                        })
-                except Exception as track_e:
-                    print(f"Track parsing error: {track_e}")
-                    continue
-        else:
-            print("⚠️ No 'Top songs' or 'Trending' chart found")
+        for track in search_results:
+            try:
+                video_id = track.get('videoId')
+                if video_id:
+                    artists_list = track.get('artists', [])
+                    artist_names = [artist.get('name', '') for artist in artists_list if isinstance(artist, dict)]
+                    artist_str = ", ".join(artist_names) if artist_names else 'Unknown Artist'
+                    
+                    thumbnails = track.get('thumbnails', [])
+                    thumbnail_url = thumbnails[-1].get('url', '') if thumbnails else ""
+                    
+                    recommendations.append({
+                        'id': video_id,
+                        'title': track.get('title', 'Unknown Track'),
+                        'artist': artist_str,
+                        'thumbnail': thumbnail_url,
+                        'type': 'song',
+                        'url': f"https://www.youtube.com/watch?v={video_id}",
+                        'views': 'Trending'
+                    })
+            except Exception as track_e:
+                continue
         
         return recommendations[:12] if recommendations else get_fallback_recommendations()
     except Exception as e:
@@ -266,8 +254,8 @@ def fast_youtube_search(query, max_results=10):
                         thumbnail_url = song['thumbnails'][-1]['url'] if len(song['thumbnails']) > 1 else song['thumbnails'][0]['url']
                     
                     # Get view count - FIXED
-                    raw_views = song.get('views')
-                    views = parse_view_count(raw_views) if raw_views else 0
+                    raw_views = song.get('views', '')
+                    views = parse_view_count(raw_views)
                     
                     songs.append({
                         'id': video_id,
@@ -340,14 +328,12 @@ def fast_youtube_search(query, max_results=10):
         return {'songs': [], 'artists': [], 'albums': []}
 
 def add_metadata_to_file(filepath, title, artist, album, thumbnail_url=None):
-    """Add metadata to downloaded MP3 file - FIXED"""
+    """Add metadata to downloaded MP3 file"""
     try:
         from mutagen import File
         from mutagen.id3 import ID3, TIT2, TPE1, TALB, APIC
         
-        # Ensure file exists
         if not os.path.exists(filepath):
-            print(f"⚠️ File not found for metadata: {filepath}")
             return
         
         try:
@@ -361,7 +347,7 @@ def add_metadata_to_file(filepath, title, artist, album, thumbnail_url=None):
         if album:
             audio["TALB"] = TALB(encoding=3, text=album)
         
-        # Add album art if available
+        # Add album art
         if thumbnail_url:
             try:
                 response = requests.get(thumbnail_url, timeout=10)
@@ -374,16 +360,14 @@ def add_metadata_to_file(filepath, title, artist, album, thumbnail_url=None):
                     audio["APIC"] = APIC(
                         encoding=3,
                         mime='image/jpeg',
-                        type=3,  # 3 is for album art
+                        type=3,
                         desc='Cover',
                         data=response.content
                     )
-                    print(f"✅ Added thumbnail to: {filepath}")
             except Exception as e:
-                print(f"⚠️ Could not add thumbnail from URL: {e}")
+                print(f"⚠️ Could not add thumbnail: {e}")
         
         audio.save(filepath)
-        print(f"✅ Metadata added to: {filepath}")
         
     except Exception as e:
         print(f"⚠️ Metadata error: {e}")
@@ -438,6 +422,31 @@ def search():
         print(f"❌ API Search failed for '{query}': {e}")
         return jsonify({'error': f'Search failed: {str(e)}'}), 500
 
+# ADD THE MISSING SUGGESTIONS ROUTE
+@app.route('/api/suggestions', methods=['POST'])
+def suggestions():
+    """Get search suggestions - WORKING VERSION"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'suggestions': []})
+        
+    query = data.get('query', '').strip()
+    if len(query) < 2:
+        return jsonify({'suggestions': []})
+        
+    try:
+        suggestions_list = get_youtube_suggestions(query)
+        return jsonify({'suggestions': suggestions_list[:5]})
+    except Exception as e:
+        print(f"Suggestions error: {e}")
+        return jsonify({'suggestions': []})
+
+# ADD SEARCH HISTORY ROUTE
+@app.route('/api/search-history')
+def get_search_history():
+    """Get user's search history"""
+    return jsonify({'history': search_history[:10]})
+
 @app.route('/api/download', methods=['POST'])
 def download():
     data = request.get_json()
@@ -480,42 +489,24 @@ def download():
 
     # ULTRA-FAST download settings
     ydl_opts = {
-        'format': 'bestaudio[ext=m4a]/bestaudio/best',
+        'format': 'bestaudio/best',
         'outtmpl': file_path.replace('.mp3', '.%(ext)s'),
         'postprocessors': [
             {
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
-            },
-            {  # ADD THIS for thumbnail embedding
-                'key': 'FFmpegMetadata',
-                'add_metadata': True,
-            },
-            {  # ADD THIS for thumbnail
-                'key': 'EmbedThumbnail',
-                'already_have_thumbnail': False,
             }
         ],
-        'writethumbnail': True,  # Download thumbnail
-        'embedthumbnail': True,  # Embed in file
+        'writethumbnail': True,
+        'embedthumbnail': True,
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
-        'no_check_certificate': True,
-        'prefer_ffmpeg': True,
-        'keepvideo': False,
-        
-        # SPEED OPTIMIZATIONS
-        'retries': 2,
-        'fragment_retries': 2,
-        'skip_unavailable_fragments': True,
-        'extract_flat': False,
-        'concurrent_fragment_downloads': 3,  # Parallel downloads
     }
 
     try:
-        print(f"🚀 Starting FAST download for: {title}")
+        print(f"🚀 Starting download for: {title}")
         start_time = time.time()
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -565,34 +556,6 @@ def serve_download(filename):
         return jsonify({'error': 'File not found'}), 404
     
     return send_file(filepath, as_attachment=True, download_name=filename)
-
-@app.route('/api/play-song/<song_id>')
-def play_song(song_id):
-    """Serve song file for playback"""
-    song = next((s for s in songs_db if s['id'] == song_id), None)
-    if not song:
-        return jsonify({'error': 'Song not found'}), 404
-        
-    filepath = os.path.join('/home/akiva/pyytm/downloads', song['filename'])
-    if not os.path.exists(filepath):
-        return jsonify({'error': 'File not found'}), 404
-        
-    return send_file(filepath)
-
-@app.route('/api/download-file/<song_id>')
-def download_file(song_id):
-    """Download song to computer"""
-    song = next((s for s in songs_db if s['id'] == song_id), None)
-    if not song:
-        return jsonify({'error': 'Song not found'}), 404
-        
-    filepath = os.path.join('/home/akiva/pyytm/downloads', song['filename'])
-    if not os.path.exists(filepath):
-        return jsonify({'error': 'File not found'}), 404
-        
-    download_name = f"{sanitize_filename(song['artist'])} - {sanitize_filename(song['title'])}.mp3"
-    
-    return send_file(filepath, as_attachment=True, download_name=download_name)
 
 def format_views(views):
     if not views or views == 0:
