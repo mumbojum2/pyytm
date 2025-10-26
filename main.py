@@ -742,11 +742,12 @@ def download():
         # Download directly as MP3 with proper filename
         output_template = os.path.join('downloads', f'{filename}.%(ext)s')  # Use .%(ext)s for flexibility
         
-        # Base command with bot bypass options
+        # Base command with bot bypass and format selection
         cmd = [
             sys.executable, '-m', 'yt_dlp',
+            '-f', 'bestaudio',  # NEW: Pick the first/best available audio format
             '-x', '--audio-format', 'mp3',
-            '--audio-quality', '0',
+            '--audio-quality', '0',  # Best quality during conversion
             '--add-metadata',
             '--embed-thumbnail',
             '--parse-metadata', 'title:%(title)s',
@@ -756,7 +757,6 @@ def download():
             '--sleep-interval', '5',  # Rate limit to avoid bans
             '--max-sleep-interval', '10',
             '--extractor-args', 'youtube:player_client=ios',  # Bypass bot detection
-            '-f', 'bestaudio'
         ]
 
         # Add cookies if file exists
@@ -775,16 +775,26 @@ def download():
             print(f"✅ Download completed for: {title}")
             time.sleep(1)
             
-            # Find the downloaded file (check for .mp3 or .webm fallback)
-            possible_files = [f"{filename}.mp3", f"{filename}.webm"]
+            # Find the downloaded file (should be .mp3, but check others)
+            possible_files = [f"{filename}.mp3", f"{filename}.m4a", f"{filename}.webm"]
             filepath = None
             for possible in possible_files:
                 test_path = os.path.join('downloads', possible)
                 if os.path.exists(test_path):
                     filepath = test_path
+                    print(f"📁 Found file: {possible}")
                     break
             
             if filepath:
+                # If not already MP3, convert with ffmpeg (quick fallback)
+                if not filepath.endswith('.mp3'):
+                    mp3_path = filepath.replace(filepath.split('.')[-1], 'mp3')
+                    ffmpeg_cmd = ['ffmpeg', '-y', '-i', filepath, '-codec:a', 'libmp3lame', '-qscale:a', '0', mp3_path]
+                    subprocess.run(ffmpeg_cmd, capture_output=True)
+                    if os.path.exists(mp3_path):
+                        filepath = mp3_path
+                        print(f"🔄 Converted to MP3: {mp3_path}")
+                
                 # Enhance metadata
                 add_metadata_to_file(filepath, title, artist, album, thumbnail)
                 
@@ -822,8 +832,8 @@ def download():
                 cmd_without_cookies = [c for c in cmd if c not in ['--cookies', 'cookies.txt']]
                 result = subprocess.run(cmd_without_cookies, capture_output=True, text=True, timeout=300)
                 if result.returncode == 0:
-                    # Recheck for file after fallback
-                    possible_files = [f"{filename}.mp3", f"{filename}.webm"]
+                    # Recheck for file after fallback (repeat file finding logic)
+                    possible_files = [f"{filename}.mp3", f"{filename}.m4a", f"{filename}.webm"]
                     filepath = None
                     for possible in possible_files:
                         test_path = os.path.join('downloads', possible)
@@ -831,14 +841,25 @@ def download():
                             filepath = test_path
                             break
                     if filepath:
+                        # Repeat metadata and saving logic...
                         add_metadata_to_file(filepath, title, artist, album, thumbnail)
-                        # ... (repeat song_info logic as above)
+                        song_info = {
+                            'id': len(songs_db) + 1,
+                            'title': title,
+                            'artist': artist,
+                            'album': album,
+                            'filename': os.path.basename(filepath),
+                            'filepath': filepath,
+                            'downloadedAt': time.strftime('%Y-%m-%d %H:%M:%S')
+                        }
+                        songs_db.append(song_info)
+                        if artist in artists_db:
+                            artists_db[artist] += 1
+                        else:
+                            artists_db[artist] = 1
+                        save_user_data()
+                        download_name = f"{safe_artist} - {safe_title}.mp3"
                         return send_file(filepath, as_attachment=True, download_name=download_name)
-                    else:
-                        return jsonify({'error': 'Fallback download succeeded but file missing'}), 500
-                else:
-                    error_msg = result.stderr
-                    print(f"❌ Fallback failed: {error_msg}")
             return jsonify({'error': f'Download failed: {error_msg[:200]}...'}), 500
             
     except Exception as e:
@@ -905,4 +926,5 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
