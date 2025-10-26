@@ -4,6 +4,7 @@
 #lol
 
 import os
+import yt_dlp
 import json
 import subprocess
 import sys
@@ -877,6 +878,7 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
 
