@@ -21,8 +21,6 @@
         .audio-player { width: 100%; height: 40px; outline: none; }
         .progress-bar { width: 100%; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; overflow: hidden; }
         .progress-fill { height: 100%; background: #10b981; transition: width 0.1s ease; }
-        .skeleton-loader { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; }
-        @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
         .play-button-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.3); border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease; }
         .play-button-overlay:hover { opacity: 1; }
     </style>
@@ -78,13 +76,13 @@
                 checkAuthentication();
             }, []);
 
-            // Fixed search handling - faster and more reliable
+            // Search handling
             useEffect(() => {
                 if (searchQuery.length >= 2) {
                     if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
                     suggestionTimer.current = setTimeout(() => {
                         fetchSuggestions();
-                    }, 200); // Reduced from 300ms to 200ms for faster response
+                    }, 200);
                 } else {
                     setShowSuggestions(false);
                     setSuggestions([]);
@@ -154,68 +152,45 @@
                 }
             };
 
-            // FIXED: Faster suggestions with better error handling
-            // FIXED: Better suggestions with proper filtering
-const fetchSuggestions = async () => {
-    if (!searchQuery.trim() || searchQuery.length < 2) {
-        setSuggestions([]);
-        setShowSuggestions(false);
-        return;
-    }
+            // FIXED: Simple suggestions without aggressive filtering
+            const fetchSuggestions = async () => {
+                if (!searchQuery.trim() || searchQuery.length < 2) {
+                    setSuggestions([]);
+                    setShowSuggestions(false);
+                    return;
+                }
 
-    try {
-        const response = await fetch(`${API_BASE}/api/suggestions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: searchQuery })
-        });
+                try {
+                    const response = await fetch(`${API_BASE}/api/suggestions`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: searchQuery })
+                    });
 
-        if (response.ok) {
-            const data = await response.json();
-            console.log('🔍 Raw suggestions:', data.suggestions); // Debug log
-            
-            // More lenient filtering - only remove obviously invalid suggestions
-            const cleanSuggestions = (data.suggestions || [])
-                .filter(suggestion => {
-                    if (!suggestion || typeof suggestion !== 'string') return false;
-                    
-                    // Remove suggestions that are just numbers or have weird patterns
-                    const cleanSuggestion = suggestion.trim();
-                    if (cleanSuggestion.length === 0) return false;
-                    if (/^\d+$/.test(cleanSuggestion)) return false; // Only numbers
-                    if (cleanSuggestion.length > 100) return false; // Too long
-                    
-                    return true;
-                })
-                .map(suggestion => {
-                    // Clean up the suggestion text
-                    let clean = suggestion.trim();
-                    
-                    // Remove common trailing garbage patterns more carefully
-                    clean = clean
-                        .replace(/\s+\d{8,}$/, '') // Remove trailing long numbers with space
-                        .replace(/[<>:"/\\|?*]+$/, '') // Remove trailing invalid filename chars
-                        .trim();
-                    
-                    return clean;
-                })
-                .filter(suggestion => suggestion.length > 0 && suggestion.length < 80)
-                .slice(0, 5);
-            
-            console.log('✅ Clean suggestions:', cleanSuggestions); // Debug log
-            
-            setSuggestions(cleanSuggestions);
-            setShowSuggestions(cleanSuggestions.length > 0);
-        } else {
-            setSuggestions([]);
-            setShowSuggestions(false);
-        }
-    } catch (error) {
-        console.error('Suggestions error:', error);
-        setSuggestions([]);
-        setShowSuggestions(false);
-    }
-};
+                    if (response.ok) {
+                        const data = await response.json();
+                        
+                        // SIMPLE FILTERING - just take the first 5 valid suggestions
+                        const cleanSuggestions = (data.suggestions || [])
+                            .filter(suggestion => suggestion && typeof suggestion === 'string')
+                            .map(suggestion => suggestion.trim())
+                            .filter(suggestion => suggestion.length > 0)
+                            .slice(0, 5);
+                        
+                        console.log('🎯 Suggestions to display:', cleanSuggestions);
+                        setSuggestions(cleanSuggestions);
+                        setShowSuggestions(cleanSuggestions.length > 0);
+                    } else {
+                        setSuggestions([]);
+                        setShowSuggestions(false);
+                    }
+                } catch (error) {
+                    console.error('Suggestions error:', error);
+                    setSuggestions([]);
+                    setShowSuggestions(false);
+                }
+            };
+
             const handleSearch = async (query = searchQuery) => {
                 const searchTerm = query.trim();
                 if (!searchTerm) {
@@ -229,7 +204,6 @@ const fetchSuggestions = async () => {
                 setActiveTab('search');
                 
                 try {
-                    console.log('🔍 Searching for:', searchTerm);
                     const response = await fetch(`${API_BASE}/api/search`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -242,7 +216,6 @@ const fetchSuggestions = async () => {
                     }
                     
                     const data = await response.json();
-                    console.log('✅ Search results:', data);
                     setSearchResults(data);
                     
                 } catch (error) {
@@ -272,18 +245,14 @@ const fetchSuggestions = async () => {
                 }
             };
 
-            // FIXED: Better play function with proper error handling
             const handlePlaySong = async (song) => {
                 try {
-                    console.log('🎵 Attempting to play:', song.title);
                     showMessage(`🔄 Loading: ${song.title}`, 'info');
                     
-                    // Try to get direct audio stream
                     const response = await fetch(`${API_BASE}/api/stream/${song.id}`);
                     const data = await response.json();
                     
                     if (data.success && data.streamUrl) {
-                        // Use the proxy to avoid CORS issues
                         const proxyUrl = `${API_BASE}/api/proxy-audio?url=${encodeURIComponent(data.streamUrl)}`;
                         
                         setNowPlaying({ 
@@ -295,7 +264,6 @@ const fetchSuggestions = async () => {
                         if (audioRef.current) {
                             audioRef.current.src = proxyUrl;
                             audioRef.current.load();
-                            // Wait a moment then try to play
                             setTimeout(() => {
                                 audioRef.current.play().catch(e => {
                                     console.log('Auto-play prevented, user can click play button');
@@ -453,7 +421,7 @@ const fetchSuggestions = async () => {
                     if (views >= 1000000000) {
                         return `${(views / 1000000000).toFixed(1)}B views`;
                     } else if (views >= 1000000) {
-                        return `${(views / 1000000).toFixed(1)}M views`;
+                        return `${(views / 1000000000).toFixed(1)}M views`;
                     } else if (views >= 1000) {
                         return `${(views / 1000).toFixed(1)}K views`;
                     } else {
@@ -567,7 +535,7 @@ const fetchSuggestions = async () => {
                                     </div>
                                 </div>
                                 
-                                {/* Search Bar - FIXED */}
+                                {/* Search Bar */}
                                 <div className="flex-1 max-w-2xl mx-8" ref={searchRef}>
                                     <div className="relative">
                                         <div className={`bg-white/20 rounded-full transition-all duration-200 ${searchFocused ? 'ring-2 ring-white/50' : ''}`}>
@@ -598,9 +566,9 @@ const fetchSuggestions = async () => {
                                             </div>
                                         </div>
 
-                                        {/* Search Suggestions - FIXED */}
-                                        {showSuggestions && (
-                                            <div className="absolute w-full bg-white/95 rounded-2xl shadow-2xl mt-2 py-2 z-10 border border-white/20 backdrop-blur-sm fade-in max-h-60 overflow-y-auto">
+                                        {/* Search Suggestions - FIXED: Now shows properly */}
+                                        {showSuggestions && suggestions.length > 0 && (
+                                            <div className="absolute w-full bg-white/95 rounded-2xl shadow-2xl mt-2 py-2 z-50 border border-white/20 backdrop-blur-sm fade-in">
                                                 {suggestions.map((suggestion, idx) => (
                                                     <button
                                                         key={idx}
@@ -714,7 +682,7 @@ const fetchSuggestions = async () => {
                             </div>
                         )}
 
-                        {/* Search Results - FIXED LAYOUT */}
+                        {/* Search Results */}
                         {activeTab === 'search' && (
                             <div className="fade-in">
                                 {loading ? (
@@ -772,7 +740,7 @@ const fetchSuggestions = async () => {
                                             </div>
                                         )}
 
-                                        {/* Songs - FIXED LAYOUT */}
+                                        {/* Songs */}
                                         {searchResults.songs && searchResults.songs.length > 0 && (
                                             <div>
                                                 <h2 className="text-2xl font-bold text-white mb-4">Songs</h2>
@@ -780,7 +748,6 @@ const fetchSuggestions = async () => {
                                                     {searchResults.songs.map((song, index) => (
                                                         <div key={`${song.id}-${index}`} className="bg-white/10 rounded-xl p-4 hover:bg-white/20 transition-all backdrop-blur-sm">
                                                             <div className="flex items-center gap-4">
-                                                                {/* FIXED: Properly aligned thumbnail with play button */}
                                                                 <div className="relative flex-shrink-0">
                                                                     <img 
                                                                         src={song.thumbnail} 
@@ -820,7 +787,6 @@ const fetchSuggestions = async () => {
                                                                     </div>
                                                                 </div>
                                                                 
-                                                                {/* FIXED: Properly aligned action buttons */}
                                                                 <div className="flex items-center gap-2 flex-shrink-0">
                                                                     <button
                                                                         onClick={() => handlePlaySong(song)}
@@ -924,49 +890,6 @@ const fetchSuggestions = async () => {
                                 )}
                             </div>
                         )}
-
-                        {/* Settings Page */}
-                        {activeTab === 'settings' && (
-                            <div className="fade-in max-w-2xl mx-auto">
-                                <h2 className="text-2xl font-bold text-white mb-6">Settings</h2>
-                                <div className="bg-white/10 rounded-2xl p-6 mb-6 backdrop-blur-sm">
-                                    <h3 className="text-xl font-semibold text-white mb-4">Authentication</h3>
-                                    {userAuthenticated ? (
-                                        <div className="flex items-center gap-3 text-green-300">
-                                            <i className="fas fa-check-circle text-xl"></i>
-                                            <p>Connected to YouTube Music</p>
-                                        </div>
-                                    ) : (
-                                        <div>
-                                            <p className="text-white/70 mb-4">Paste your browser.json content to connect to YouTube Music</p>
-                                            <textarea
-                                                value={browserJson}
-                                                onChange={(e) => setBrowserJson(e.target.value)}
-                                                placeholder="Paste browser.json content here..."
-                                                className="w-full h-32 p-4 rounded-lg bg-white/20 text-white placeholder-white/50 mb-4 resize-none"
-                                            ></textarea>
-                                            <button
-                                                onClick={handleAuthenticate}
-                                                disabled={loading}
-                                                className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all disabled:opacity-50"
-                                            >
-                                                {loading ? (
-                                                    <>
-                                                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full inline-block mr-2"></div>
-                                                        Connecting...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <i className="fas fa-link mr-2"></i>
-                                                        Connect
-                                                    </>
-                                                )}
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
             );
@@ -976,4 +899,3 @@ const fetchSuggestions = async () => {
     </script>
 </body>
 </html>
-
