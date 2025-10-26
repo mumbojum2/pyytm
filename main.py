@@ -756,6 +756,7 @@ def download():
             '--sleep-interval', '5',  # Rate limit to avoid bans
             '--max-sleep-interval', '10',
             '--extractor-args', 'youtube:player_client=ios',  # Bypass bot detection
+            '-f', 'bestaudio'
         ]
 
         # Add cookies if file exists
@@ -904,3 +905,4 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
