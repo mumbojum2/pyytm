@@ -372,6 +372,35 @@ def add_metadata_to_file(filepath, title, artist, album, thumbnail_url=None):
     except Exception as e:
         print(f"⚠️ Metadata error: {e}")
 
+def get_audio_stream_url(video_id):
+    """Get direct audio stream URL for native playback"""
+    try:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+            
+            # Get the best audio format URL
+            if 'url' in info:
+                return info['url']
+            elif 'formats' in info:
+                # Find the best audio format
+                audio_formats = [f for f in info['formats'] if f.get('vcodec') == 'none' and f.get('acodec') != 'none']
+                if audio_formats:
+                    # Prefer formats with higher quality
+                    audio_formats.sort(key=lambda x: x.get('quality', 0) or 0, reverse=True)
+                    return audio_formats[0]['url']
+            
+        return None
+    except Exception as e:
+        print(f"Audio stream error: {e}")
+        return None
+
 # Load user data at startup
 load_user_data()
 
@@ -422,7 +451,6 @@ def search():
         print(f"❌ API Search failed for '{query}': {e}")
         return jsonify({'error': f'Search failed: {str(e)}'}), 500
 
-# ADD THE MISSING SUGGESTIONS ROUTE
 @app.route('/api/suggestions', methods=['POST'])
 def suggestions():
     """Get search suggestions - WORKING VERSION"""
@@ -441,11 +469,60 @@ def suggestions():
         print(f"Suggestions error: {e}")
         return jsonify({'suggestions': []})
 
-# ADD SEARCH HISTORY ROUTE
 @app.route('/api/search-history')
 def get_search_history():
     """Get user's search history"""
     return jsonify({'history': search_history[:10]})
+
+# NEW: Get audio stream for native playback
+@app.route('/api/stream/<video_id>')
+def get_audio_stream(video_id):
+    """Get direct audio stream URL for native playback"""
+    try:
+        stream_url = get_audio_stream_url(video_id)
+        if stream_url:
+            return jsonify({
+                'success': True,
+                'streamUrl': stream_url,
+                'type': 'direct'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Could not get audio stream'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# NEW: Proxy audio stream for CORS
+@app.route('/api/proxy-audio')
+def proxy_audio():
+    """Proxy audio stream to avoid CORS issues"""
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'error': 'No URL provided'}), 400
+    
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Range': request.headers.get('Range', ''),
+        }
+        
+        response = requests.get(url, headers=headers, stream=True, timeout=30)
+        
+        return_response = app.response_class(
+            response=response.iter_content(chunk_size=8192),
+            status=response.status_code,
+            headers=dict(response.headers),
+            mimetype=response.headers.get('content-type', 'audio/mpeg')
+        )
+        
+        return return_response
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/download', methods=['POST'])
 def download():
@@ -556,6 +633,19 @@ def serve_download(filename):
         return jsonify({'error': 'File not found'}), 404
     
     return send_file(filepath, as_attachment=True, download_name=filename)
+
+@app.route('/api/play-song/<song_id>')
+def play_song(song_id):
+    """Serve song file for playback"""
+    song = next((s for s in songs_db if s['id'] == song_id), None)
+    if not song:
+        return jsonify({'error': 'Song not found'}), 404
+        
+    filepath = os.path.join('/home/akiva/pyytm/downloads', song['filename'])
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
+        
+    return send_file(filepath)
 
 def format_views(views):
     if not views or views == 0:
