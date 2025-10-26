@@ -1,6 +1,6 @@
 # YouTube Music Downloader - "MusicGrab Pro"
 # Complete Flask backend with React frontend
-# main.py
+# main.py (deployable on Koyeb/Vercel)
 
 import os
 import json
@@ -251,6 +251,35 @@ def get_popular_recommendations():
         return recommendations
     except Exception as e:
         print(f"Popular recommendations error: {e}")
+        # Enhanced fallback with more robust parsing
+        try:
+            # Retry with different params or fallback to a static list if parsing fails
+            recommendations = []
+            for item in charts.get('charts', [])[:1]:  # Take first chart
+                for track in item.get('items', [])[:12]:
+                    try:
+                        video_id = track.get('videoId') or track.get('video_id', '')
+                        if video_id:
+                            title = track.get('title', 'Unknown Track')
+                            artists = track.get('artists', [{'name': 'Unknown Artist'}])
+                            artist_str = ", ".join([a.get('name', 'Unknown') for a in artists])
+                            thumb = track.get('thumbnails', [{}])[-1].get('url', '')
+                            recommendations.append({
+                                'id': video_id,
+                                'title': title,
+                                'artist': artist_str,
+                                'thumbnail': thumb,
+                                'type': 'song',
+                                'url': f"https://www.youtube.com/watch?v={video_id}",
+                                'views': 'Popular'
+                            })
+                    except Exception as track_e:
+                        print(f"Track parsing error: {track_e}")
+                        continue
+            if recommendations:
+                return recommendations[:12]
+        except Exception as retry_e:
+            print(f"Retry failed: {retry_e}")
         return get_fallback_recommendations()
 
 def get_fallback_recommendations():
@@ -763,7 +792,6 @@ def download():
             '--sleep-interval', '5',  # Rate limit
             '--max-sleep-interval', '10',
             '--extractor-args', 'youtube:player_client=ios',  # iOS client bypass
-            url
         ] + evasion_opts  # Add UA and referer
 
         attempts = 0
@@ -771,15 +799,19 @@ def download():
         final_error = None
         
         while attempts < max_attempts:
+            # Copy base cmd
+            current_cmd = cmd[:]
+            
             # Add cookies if file exists and first attempt
             if attempts == 0 and os.path.exists('cookies.txt'):
-                cmd_with_cookies = cmd + ['--cookies', 'cookies.txt']
+                current_cmd.extend(['--cookies', 'cookies.txt'])
                 print("🔑 Using cookies for auth")
-                current_cmd = cmd_with_cookies
             else:
                 print(f"⚠️ Attempt {attempts + 1}: No cookies")
-                current_cmd = cmd[:]  # Copy base without cookies
-                
+            
+            # Append URL (critical fix: ensure URL is always added)
+            current_cmd.append(url)
+            
             print(f"📥 Running download command (attempt {attempts + 1})...")
             result = subprocess.run(current_cmd, capture_output=True, text=True, timeout=300)
             
@@ -805,7 +837,8 @@ def download():
                         ff_result = subprocess.run(ffmpeg_cmd, capture_output=True)
                         if ff_result.returncode == 0 and os.path.exists(mp3_path):
                             filepath = mp3_path
-                            os.remove(filepath)  # Clean up original
+                            if os.path.exists(filepath.replace('.mp3', '.m4a')):  # Clean up if original exists
+                                os.remove(filepath.replace('.mp3', '.m4a'))
                             print(f"🔄 Converted to MP3: {mp3_path}")
                         else:
                             print(f"⚠️ FFmpeg conversion failed: {ff_result.stderr}")
@@ -925,7 +958,3 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
-
-
-
