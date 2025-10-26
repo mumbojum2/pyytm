@@ -2,5 +2,5 @@ flask==2.3.3
 flask-cors==4.0.0
 requests==2.31.0
 yt-dlp==2023.11.16
-ytmusicapi==1.0.0
+ytmusicapi>=1.11.1
 mutagen==1.47.0
