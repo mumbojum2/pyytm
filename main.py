@@ -293,78 +293,96 @@ def get_library_data():
         return {'songs': [], 'albums': [], 'artists': [], 'playlists': []}
 
 def fast_youtube_search(query, max_results=10):
-    print(f"Searching for: {query}")  # Debug line
+    print(f"🔍 Searching for: '{query}'")  # Debug
     if not query:
         return {'songs': [], 'artists': [], 'albums': []}
 
-    # Add to search history
-    if query not in search_history:
-        search_history.insert(0, query)
-        search_history = search_history[:10]  # Keep only last 10
-        save_user_data()
-
     try:
         from ytmusicapi import YTMusic
+        print("✅ YTMusic imported successfully")
+        
         yt = YTMusic()
+        print("✅ YTMusic instance created")
         
-        songs_results = yt.search(query, filter='songs', limit=max_results)
-        artists_results = yt.search(query, filter='artists', limit=4)
-        albums_results = yt.search(query, filter='albums', limit=4)
-        
+        # Search with error handling for each type
         songs = []
-        for song in songs_results:
-            try:
-                video_id = song.get('videoId', '')
-                artists = ", ".join([artist['name'] for artist in song.get('artists', [])])
-                album = song.get('album', {}).get('name', '') if song.get('album') else ''
-                
-                thumbnail_url = ""
-                if song.get('thumbnails'):
-                    thumbnail_url = song['thumbnails'][-1]['url'] if len(song['thumbnails']) > 1 else song['thumbnails'][0]['url']
-                
-                views = get_accurate_views(video_id)
-                
-                songs.append({
-                    'id': video_id,
-                    'title': song.get('title', 'Unknown Title'),
-                    'url': f"https://www.youtube.com/watch?v={video_id}",
-                    'duration': song.get('duration', '0:00'),
-                    'artist': artists,
-                    'album': album,
-                    'thumbnail': thumbnail_url,
-                    'views': format_views(views),
-                    'is_explicit': any(word in song.get('title', '').lower() for word in ['explicit', 'clean']),
-                    'raw_views': views
-                })
-            except:
-                continue
-        
         artists = []
-        for artist in artists_results:
-            try:
-                artists.append({
-                    'id': artist.get('browseId', ''),
-                    'name': artist.get('artist', ''),
-                    'thumbnail': artist['thumbnails'][-1]['url'] if artist.get('thumbnails') else "",
-                    'type': 'artist'
-                })
-            except:
-                continue
-        
         albums = []
-        for album in albums_results:
-            try:
-                albums.append({
-                    'id': album.get('browseId', ''),
-                    'title': album.get('title', ''),
-                    'artist': album.get('artists', [{}])[0].get('name', '') if album.get('artists') else '',
-                    'year': album.get('year', ''),
-                    'thumbnail': album['thumbnails'][-1]['url'] if album.get('thumbnails') else "",
-                    'type': 'album'
-                })
-            except:
-                continue
         
+        try:
+            songs_results = yt.search(query, filter='songs', limit=max_results)
+            print(f"✅ Found {len(songs_results)} songs")
+            
+            for song in songs_results:
+                try:
+                    video_id = song.get('videoId', '')
+                    song_artists = song.get('artists', [])
+                    artists_str = ", ".join([artist.get('name', 'Unknown') for artist in song_artists]) if song_artists else 'Unknown Artist'
+                    
+                    thumbnail_url = ""
+                    if song.get('thumbnails'):
+                        thumbnail_url = song['thumbnails'][-1]['url'] if len(song['thumbnails']) > 1 else song['thumbnails'][0]['url']
+                    
+                    songs.append({
+                        'id': video_id,
+                        'title': song.get('title', 'Unknown Title'),
+                        'url': f"https://www.youtube.com/watch?v={video_id}" if video_id else '',
+                        'duration': song.get('duration', '0:00'),
+                        'artist': artists_str,
+                        'album': song.get('album', {}).get('name', '') if song.get('album') else '',
+                        'thumbnail': thumbnail_url,
+                        'views': 'Unknown views',
+                        'is_explicit': False,
+                        'raw_views': 0
+                    })
+                except Exception as song_error:
+                    print(f"⚠️ Error processing song: {song_error}")
+                    continue
+                    
+        except Exception as songs_error:
+            print(f"❌ Songs search failed: {songs_error}")
+        
+        try:
+            artists_results = yt.search(query, filter='artists', limit=4)
+            print(f"✅ Found {len(artists_results)} artists")
+            
+            for artist in artists_results:
+                try:
+                    artists.append({
+                        'id': artist.get('browseId', ''),
+                        'name': artist.get('artist', 'Unknown Artist'),
+                        'thumbnail': artist['thumbnails'][-1]['url'] if artist.get('thumbnails') else "",
+                        'type': 'artist'
+                    })
+                except Exception as artist_error:
+                    print(f"⚠️ Error processing artist: {artist_error}")
+                    continue
+                    
+        except Exception as artists_error:
+            print(f"❌ Artists search failed: {artists_error}")
+        
+        try:
+            albums_results = yt.search(query, filter='albums', limit=4)
+            print(f"✅ Found {len(albums_results)} albums")
+            
+            for album in albums_results:
+                try:
+                    albums.append({
+                        'id': album.get('browseId', ''),
+                        'title': album.get('title', 'Unknown Album'),
+                        'artist': album.get('artists', [{}])[0].get('name', '') if album.get('artists') else 'Unknown Artist',
+                        'year': album.get('year', ''),
+                        'thumbnail': album['thumbnails'][-1]['url'] if album.get('thumbnails') else "",
+                        'type': 'album'
+                    })
+                except Exception as album_error:
+                    print(f"⚠️ Error processing album: {album_error}")
+                    continue
+                    
+        except Exception as albums_error:
+            print(f"❌ Albums search failed: {albums_error}")
+        
+        print(f"🎯 Search complete: {len(songs)} songs, {len(artists)} artists, {len(albums)} albums")
         return {
             'songs': songs,
             'artists': artists,
@@ -372,7 +390,7 @@ def fast_youtube_search(query, max_results=10):
         }
         
     except Exception as e:
-        print(f"Search error: {e}")
+        print(f"❌ Search function failed completely: {e}")
         return {'songs': [], 'artists': [], 'albums': []}
 
 def get_accurate_views(video_id):
@@ -791,6 +809,7 @@ def format_views(views):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000, debug=False)
+
 
 
 
