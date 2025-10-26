@@ -228,51 +228,51 @@
             };
 
             const handleDownload = async (song) => {
-    setDownloading(song.id);
-    try {
-        const payload = {
-            videoId: song.id,
-            title: song.title,
-            artist: song.artist,
-            album: song.album || '',
-            thumbnail: song.thumbnail || '',
-            format: 'mp3'
-        };
-        console.log('Download payload:', payload);
+                setDownloading(song.id);
+                try {
+                    const payload = {
+                        videoId: song.id,
+                        title: song.title,
+                        artist: song.artist,
+                        album: song.album || '',
+                        thumbnail: song.thumbnail || '',
+                        format: 'mp3'
+                    };
+                    console.log('Download payload:', payload);
 
-        const response = await fetch(`${API_BASE}/api/download`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+                    const response = await fetch(`${API_BASE}/api/download`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Download failed');
-        }
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Download failed');
+                    }
 
-        const data = await response.json();
-        if (data.status === 'success') {
-            const cleanFilename = `${song.artist} - ${song.title}.mp3`.replace(/[<>:"/\\|?*]/g, '');
-            const link = document.createElement('a');
-            link.href = `${API_BASE}${data.downloadUrl}`;
-            link.download = cleanFilename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        const cleanFilename = `${song.artist} - ${song.title}.mp3`.replace(/[<>:"/\\|?*]/g, '');
+                        const link = document.createElement('a');
+                        link.href = `${API_BASE}${data.downloadUrl}`;
+                        link.download = cleanFilename;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
 
-            showMessage(`✅ "${song.title}" downloaded!`, 'success');
-            await Promise.all([loadSongs(), loadArtists()]);
-        } else {
-            throw new Error(data.error || 'Download failed');
-        }
-    } catch (error) {
-        console.error('Download error:', error);
-        showMessage(`❌ ${error.message}`, 'error');
-    } finally {
-        setDownloading(null);
-    }
-};
+                        showMessage(`✅ "${song.title}" downloaded!`, 'success');
+                        await Promise.all([loadSongs(), loadArtists()]);
+                    } else {
+                        throw new Error(data.error || 'Download failed');
+                    }
+                } catch (error) {
+                    console.error('Download error:', error);
+                    showMessage(`❌ ${error.message}`, 'error');
+                } finally {
+                    setDownloading(null);
+                }
+            };
 
             const downloadToComputer = async (songId) => {
                 try {
@@ -1047,7 +1047,7 @@
                                                     <div className="flex-1">
                                                         <h3 className="font-semibold text-white text-lg">{song.title}</h3>
                                                         <div className="text-white/70 text-sm">
-                                                            {song.artist} • {song.album} • Downloaded {song.downloadedAt}
+                                                            {song.artist} • {song.album} • Downloaded {song.downloaded_at}
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
@@ -1060,14 +1060,11 @@
                                                         </button>
                                                         <button
                                                             onClick={() => downloadToComputer(song.id)}
-                                                            className="bg-green-500/20 text-green-300 px-4 py-2 rounded-lg hover:bg-green-500/30 transition-all"
+                                                            className="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-all"
                                                         >
                                                             <i className="fas fa-download mr-2"></i>
-                                                            Save
+                                                            Download
                                                         </button>
-                                                        <span className="text-green-400 text-2xl">
-                                                            <i className="fas fa-check-circle"></i>
-                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1080,37 +1077,30 @@
                         {/* Your Artists Page */}
                         {activeTab === 'artists' && (
                             <div className="fade-in">
-                                <h2 className="text-2xl font-bold text-white mb-6">Your Artists</h2>
+                                <h2 className="text-2xl font-bold text-white mb-6">Your Downloaded Artists</h2>
                                 {Object.keys(artists).length === 0 ? (
                                     <div className="text-center py-16">
-                                        <i className="fas fa-users text-white/40 text-6xl mb-4"></i>
+                                        <i className="fas fa-user-friends text-white/40 text-6xl mb-4"></i>
                                         <h3 className="text-xl font-semibold text-white mb-2">No artists yet</h3>
-                                        <p className="text-white/70">Artists will appear as you download songs</p>
+                                        <p className="text-white/70">Artists from your downloaded songs will appear here</p>
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                        {Object.entries(artists).map(([artistName, songCount], idx) => {
-                                            const artistSongs = getArtistSongs(artistName);
-                                            return (
-                                                <div key={idx} className="bg-white/10 rounded-2xl p-6 text-center hover-lift backdrop-blur-sm cursor-pointer"
-                                                     onClick={() => {
-                                                         setArtistPage({
-                                                             artist: artistName,
-                                                             songs: artistSongs,
-                                                             thumbnail: artistSongs[0]?.thumbnail || ''
-                                                         });
-                                                         setActiveTab('artist');
-                                                     }}>
-                                                    <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-2xl mx-auto mb-4">
-                                                        <i className="fas fa-user"></i>
-                                                    </div>
-                                                    <div>
-                                                        <h3 className="font-semibold text-white text-lg mb-1 truncate">{artistName}</h3>
-                                                        <p className="text-white/70">{songCount} song{songCount !== 1 ? 's' : ''}</p>
-                                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        {Object.entries(artists).map(([artistName, count]) => (
+                                            <div key={artistName} className="bg-white/10 rounded-2xl p-6 text-center hover-lift backdrop-blur-sm">
+                                                <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-2xl mx-auto mb-4">
+                                                    <i className="fas fa-user"></i>
                                                 </div>
-                                            );
-                                        })}
+                                                <h3 className="font-semibold text-white text-lg mb-2">{artistName}</h3>
+                                                <p className="text-white/70 text-sm">{count} {count === 1 ? 'song' : 'songs'}</p>
+                                                <button
+                                                    onClick={() => handleArtistClick(artistName)}
+                                                    className="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-all text-sm mt-2"
+                                                >
+                                                    View Songs
+                                                </button>
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
                             </div>
@@ -1119,103 +1109,52 @@
                         {/* Artist Page */}
                         {activeTab === 'artist' && artistPage && (
                             <div className="fade-in">
-                                <div className="bg-white/10 rounded-2xl p-8 mb-6 backdrop-blur-sm">
-                                    <div className="flex items-center gap-6">
-                                        <img 
-                                            src={artistPage.thumbnail} 
-                                            alt={artistPage.artist}
-                                            loading="lazy"
-                                            decoding="async"
-                                            className="w-32 h-32 rounded-full object-cover"
-                                            onError={(e) => {
-                                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgdmlld0JveD0iMCAwIDEyOCAxMjgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9IiNFRTVFNUUiLz48Y2lyY2xlIGN4PSI2NCIgY3k9IjQ4IiByPSIyNCIgZmlsbD0iIzhFOEU4RSIvPjxwYXRoIGQ9Ik00MCAxMDRDNDAgODggNTYgNzYgNjQgNzZDNzIgNzYgODggODggODggMTA0SDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
-                                            }}
-                                        />
-                                        <div>
-                                            <h1 className="text-4xl font-bold text-white mb-2">{artistPage.artist}</h1>
-                                            <p className="text-white/70">{artistPage.songs.length} songs in your library</p>
-                                            {artistPage.description && (
-                                                <p className="text-white/60 mt-2 line-clamp-2">{artistPage.description}</p>
-                                            )}
-                                        </div>
+                                <div className="flex items-center gap-6 mb-8">
+                                    <img 
+                                        src={artistPage.thumbnail} 
+                                        alt={artistPage.artist}
+                                        loading="lazy"
+                                        decoding="async"
+                                        className="w-32 h-32 rounded-full object-cover"
+                                        onError={(e) => {
+                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgdmlld0JveD0iMCAwIDEyOCAxMjgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9IiNFRTVFNUUiLz48Y2lyY2xlIGN4PSI2NCIgY3k9IjQ4IiByPSIyNCIgZmlsbD0iIzhFOEU4RSIvPjxwYXRoIGQ9Ik00MCAxMDVDNDAgOTAgNDggODIgNTYgODJDNjQgODIgNzIgOTAgNzIgMTA1SDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
+                                        }}
+                                    />
+                                    <div>
+                                        <h2 className="text-3xl font-bold text-white mb-2">{artistPage.artist}</h2>
+                                        <p className="text-white/70 max-w-2xl">{artistPage.description}</p>
                                     </div>
                                 </div>
-
-                                <h2 className="text-2xl font-bold text-white mb-4">Songs</h2>
+                                <h3 className="text-2xl font-bold text-white mb-4">Songs</h3>
                                 <div className="space-y-2">
                                     {artistPage.songs.map((song, index) => (
-                                        <div key={`${song.id}-${index}`} className="bg-white/10 rounded-xl p-4 hover:bg-white/20 transition-all backdrop-blur-sm">
+                                        <div key={song.id} className="bg-white/10 rounded-xl p-4 hover:bg-white/20 transition-all backdrop-blur-sm">
                                             <div className="flex items-center gap-4">
-                                                <div className="relative flex-shrink-0">
-                                                    <img 
-                                                        src={song.thumbnail} 
-                                                        alt={song.title}
-                                                        loading="lazy"
-                                                        decoding="async"
-                                                        className="w-12 h-12 rounded-lg object-cover"
-                                                        onError={(e) => {
-                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI4TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
-                                                        }}
-                                                    />
+                                                <img 
+                                                    src={song.thumbnail} 
+                                                    alt={song.title}
+                                                    loading="lazy"
+                                                    decoding="async"
+                                                    className="w-12 h-12 rounded-lg object-cover"
+                                                />
+                                                <div className="flex-1">
+                                                    <h3 className="font-semibold text-white text-base">{song.title}</h3>
+                                                    <p className="text-white/70 text-sm">{song.album}</p>
+                                                    <p className="text-white/60 text-xs">Duration: {song.duration} • {song.views}</p>
                                                 </div>
-                                                
-                                                <div className="flex-1 min-w-0">
-                                                    <h3 className="font-semibold text-white text-base mb-1">
-                                                        {song.title}
-                                                    </h3>
-                                                    <div className="text-sm text-white/70 mb-1">
-                                                        {song.album && <span>Album: {song.album}</span>}
-                                                    </div>
-                                                    <div className="flex items-center gap-3 text-xs text-white/60">
-                                                        <span>Duration: {song.duration}</span>
-                                                        <span>•</span>
-                                                        <span>{song.views}</span>
-                                                    </div>
-                                                </div>
-                                                
-                                                <div className="flex items-center gap-2">
-                                                    {'url' in song && (
-                                                        <button
-                                                            onClick={() => handleDownload(song)}
-                                                            disabled={downloading === song.id}
-                                                            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-                                                                downloading === song.id 
-                                                                    ? 'bg-green-500/20 text-green-300 cursor-not-allowed' 
-                                                                    : 'bg-white/20 text-white hover:bg-white/30'
-                                                            }`}
-                                                        >
-                                                            {downloading === song.id ? (
-                                                                <>
-                                                                    <div className="animate-spin w-4 h-4 border-2 border-green-300 border-t-transparent rounded-full"></div>
-                                                                    <span>Downloading...</span>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <i className="fas fa-download"></i>
-                                                                    <span>Download</span>
-                                                                </>
-                                                            )}
-                                                        </button>
-                                                    )}
-                                                    {'filename' in song && (
-                                                        <>
-                                                            <button
-                                                                onClick={() => playSong(song.id)}
-                                                                className="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-all"
-                                                            >
-                                                                <i className="fas fa-play mr-2"></i>
-                                                                Play
-                                                            </button>
-                                                            <button
-                                                                onClick={() => downloadToComputer(song.id)}
-                                                                className="bg-green-500/20 text-green-300 px-4 py-2 rounded-lg hover:bg-green-500/30 transition-all"
-                                                            >
-                                                                <i className="fas fa-download mr-2"></i>
-                                                                Save
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                </div>
+                                                <button
+                                                    onClick={() => handleDownload({
+                                                        id: song.id,
+                                                        title: song.title,
+                                                        artist: artistPage.artist,
+                                                        album: song.album,
+                                                        thumbnail: song.thumbnail
+                                                    })}
+                                                    className="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-all"
+                                                >
+                                                    <i className="fas fa-download mr-2"></i>
+                                                    Download
+                                                </button>
                                             </div>
                                         </div>
                                     ))}
@@ -1225,101 +1164,67 @@
 
                         {/* Settings Page */}
                         {activeTab === 'settings' && (
-                            <div className="fade-in">
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                    {/* Authentication Section */}
-                                    <div className="bg-white/10 rounded-2xl p-6 backdrop-blur-sm">
-                                        <h2 className="text-2xl font-bold text-white mb-4">YouTube Music Authentication</h2>
-                                        <p className="text-white/70 mb-4">
-                                            Connect your YouTube Music account to access personalized recommendations and your library.
-                                        </p>
-                                        
-                                        {userAuthenticated ? (
-                                            <div className="bg-green-500/20 border border-green-500/30 rounded-xl p-4">
-                                                <div className="flex items-center gap-3">
-                                                    <i className="fas fa-check-circle text-green-400 text-xl"></i>
-                                                    <div>
-                                                        <h3 className="font-semibold text-white">Connected</h3>
-                                                        <p className="text-green-300 text-sm">Your YouTube Music account is connected</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div>
-                                                <div className="mb-4">
-                                                    <label className="block text-white font-medium mb-2">Paste your browser.json content:</label>
-                                                    <textarea
-                                                        value={browserJson}
-                                                        onChange={(e) => setBrowserJson(e.target.value)}
-                                                        placeholder='Paste the contents of your browser.json file here...'
-                                                        className="w-full h-48 p-4 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/50 focus:outline-none focus:border-white/40 font-mono text-sm resize-none"
-                                                    />
-                                                </div>
-                                                <button
-                                                    onClick={handleAuthenticate}
-                                                    disabled={loading || !browserJson.trim()}
-                                                    className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-500 text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2"
-                                                >
-                                                    {loading ? (
-                                                        <>
-                                                            <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
-                                                            Authenticating...
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <i className="fas fa-plug"></i>
-                                                            Connect YouTube Music
-                                                        </>
-                                                    )}
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Data Management Section */}
-                                    <div className="bg-white/10 rounded-2xl p-6 backdrop-blur-sm">
-                                        <h2 className="text-2xl font-bold text-white mb-4">Data Management</h2>
-                                        <p className="text-white/70 mb-4">
-                                            Export your data to backup or import from a previous backup.
-                                        </p>
-                                        
-                                        <div className="space-y-4">
+                            <div className="fade-in max-w-2xl mx-auto">
+                                <h2 className="text-2xl font-bold text-white mb-6">Settings</h2>
+                                <div className="bg-white/10 rounded-2xl p-6 mb-6 backdrop-blur-sm">
+                                    <h3 className="text-xl font-semibold text-white mb-4">Authentication</h3>
+                                    {userAuthenticated ? (
+                                        <div className="flex items-center gap-3 text-green-300">
+                                            <i className="fas fa-check-circle text-xl"></i>
+                                            <p>Connected to YouTube Music</p>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <p className="text-white/70 mb-4">Paste your browser.json content to connect to YouTube Music</p>
+                                            <textarea
+                                                value={browserJson}
+                                                onChange={(e) => setBrowserJson(e.target.value)}
+                                                placeholder="Paste browser.json content here..."
+                                                className="w-full h-32 p-4 rounded-lg bg-white/20 text-white placeholder-white/50 mb-4 resize-none"
+                                            ></textarea>
                                             <button
-                                                onClick={handleExportData}
-                                                className="w-full bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2"
+                                                onClick={handleAuthenticate}
+                                                disabled={loading}
+                                                className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all disabled:opacity-50"
                                             >
-                                                <i className="fas fa-download"></i>
-                                                Export All Data
+                                                {loading ? (
+                                                    <>
+                                                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full inline-block mr-2"></div>
+                                                        Connecting...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <i className="fas fa-link mr-2"></i>
+                                                        Connect
+                                                    </>
+                                                )}
                                             </button>
-                                            
-                                            <div className="relative">
-                                                <input
-                                                    type="file"
-                                                    id="import-file"
-                                                    accept=".json"
-                                                    onChange={handleImportData}
-                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                />
-                                                <label htmlFor="import-file" className="w-full bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 cursor-pointer">
-                                                    <i className="fas fa-upload"></i>
-                                                    Import Data Backup
-                                                </label>
-                                            </div>
                                         </div>
-                                        
-                                        <div className="mt-6 p-4 bg-yellow-500/20 border border-yellow-500/30 rounded-xl">
-                                            <div className="flex items-start gap-3">
-                                                <i className="fas fa-exclamation-triangle text-yellow-400 mt-1"></i>
-                                                <div>
-                                                    <h3 className="font-semibold text-white text-sm">Privacy Notice</h3>
-                                                    <p className="text-yellow-300 text-xs">
-                                                        Your browser.json is only used temporarily for authentication and is never stored on our servers. 
-                                                        All your data is stored locally in your browser.
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-white/10 rounded-2xl p-6 backdrop-blur-sm">
+                                    <h3 className="text-xl font-semibold text-white mb-4">Data Management</h3>
+                                    <div className="flex items-center gap-4 mb-4">
+                                        <button
+                                            onClick={handleExportData}
+                                            className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all"
+                                        >
+                                            <i className="fas fa-download mr-2"></i>
+                                            Export Data
+                                        </button>
+                                        <label className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all cursor-pointer">
+                                            <i className="fas fa-upload mr-2"></i>
+                                            Import Data
+                                            <input
+                                                type="file"
+                                                accept=".json"
+                                                onChange={handleImportData}
+                                                className="hidden"
+                                            />
+                                        </label>
                                     </div>
+                                    <p className="text-white/70 text-sm">Export or import your downloaded songs and artists data</p>
                                 </div>
                             </div>
                         )}
@@ -1332,4 +1237,3 @@
     </script>
 </body>
 </html>
-
