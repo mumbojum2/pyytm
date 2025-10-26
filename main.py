@@ -513,6 +513,7 @@ def search():
         results = fast_youtube_search(query, 10)
         return jsonify(results)
     except Exception as e:
+        print(f"Search error details: {str(e)}")  # Add this line for debugging
         return jsonify({'error': f'Search failed: {str(e)}'}), 500
 
 @app.route('/api/artist/<artist_id>')
@@ -777,3 +778,4 @@ def format_views(views):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000, debug=False)
+
