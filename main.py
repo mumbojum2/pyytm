@@ -75,13 +75,13 @@ def install_dependencies():
         print(f"⚠️ yt-dlp upgrade failed: {e}")
 
     # Install ffmpeg
-    print("🔧 Installing ffmpeg...")
-    try:
-        subprocess.run(['apt-get', 'update'], check=False, capture_output=True)
-        subprocess.run(['apt-get', 'install', '-y', 'ffmpeg'], check=False, capture_output=True)
-        print("✅ ffmpeg installed")
-    except Exception as e:
-        print(f"⚠️ ffmpeg issues: {e}")
+#    print("🔧 Installing ffmpeg...")
+#    try:
+#        subprocess.run(['apt-get', 'update'], check=False, capture_output=True)
+#        subprocess.run(['apt-get', 'install', '-y', 'ffmpeg'], check=False, capture_output=True)
+#        print("✅ ffmpeg installed")
+#   except Exception as e:
+#        print(f"⚠️ ffmpeg issues: {e}")
 
 install_dependencies()
 
@@ -959,4 +959,5 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
