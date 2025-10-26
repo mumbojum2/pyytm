@@ -791,7 +791,7 @@ def download():
             '-o', output_template,
             '--no-warnings',
             '--quiet',
-            '--cookies', 'cookies.txt',  # KEEP THIS LINE - uses external cookies file
+            '--cookies', 'cookies.txt',
             url
         ]
 
@@ -903,3 +903,4 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
