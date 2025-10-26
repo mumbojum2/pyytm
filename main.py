@@ -61,6 +61,18 @@ def install_dependencies():
             except Exception as e:
                 print(f"❌ Failed to install {package}: {e}")
 
+    # Upgrade yt-dlp to latest for bot detection fixes
+    print("🔄 Upgrading yt-dlp...")
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        print("✅ yt-dlp upgraded")
+    except Exception as e:
+        print(f"⚠️ yt-dlp upgrade failed: {e}")
+
     # Install ffmpeg
     print("🔧 Installing ffmpeg...")
     try:
@@ -728,9 +740,9 @@ def download():
         filename = filename[:100]
         
         # Download directly as MP3 with proper filename
-        output_template = os.path.join('downloads', f'{filename}.mp3')
+        output_template = os.path.join('downloads', f'{filename}.%(ext)s')  # Use .%(ext)s for flexibility
         
-        # Download with metadata - force MP3 format - WITH COOKIES
+        # Base command with bot bypass options
         cmd = [
             sys.executable, '-m', 'yt_dlp',
             '-x', '--audio-format', 'mp3',
@@ -741,9 +753,19 @@ def download():
             '--parse-metadata', 'uploader:%(artist)s',
             '-o', output_template,
             '--no-warnings',
-            '--cookies', 'cookies.txt',  # KEEP COOKIES FOR AGE-RESTRICTED CONTENT
-            url
+            '--sleep-interval', '5',  # Rate limit to avoid bans
+            '--max-sleep-interval', '10',
+            '--extractor-args', 'youtube:player_client=ios',  # Bypass bot detection
         ]
+
+        # Add cookies if file exists
+        if os.path.exists('cookies.txt'):
+            cmd.extend(['--cookies', 'cookies.txt'])
+            print("🔑 Using cookies for auth")
+        else:
+            print("⚠️ No cookies.txt found; proceeding without auth")
+
+        cmd.append(url)
 
         print(f"📥 Running download command...")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -752,11 +774,16 @@ def download():
             print(f"✅ Download completed for: {title}")
             time.sleep(1)
             
-            # Find the downloaded file
-            downloaded_file = f"{filename}.mp3"
-            filepath = os.path.join('downloads', downloaded_file)
+            # Find the downloaded file (check for .mp3 or .webm fallback)
+            possible_files = [f"{filename}.mp3", f"{filename}.webm"]
+            filepath = None
+            for possible in possible_files:
+                test_path = os.path.join('downloads', possible)
+                if os.path.exists(test_path):
+                    filepath = test_path
+                    break
             
-            if os.path.exists(filepath):
+            if filepath:
                 # Enhance metadata
                 add_metadata_to_file(filepath, title, artist, album, thumbnail)
                 
@@ -765,7 +792,7 @@ def download():
                     'title': title,
                     'artist': artist,
                     'album': album,
-                    'filename': downloaded_file,
+                    'filename': os.path.basename(filepath),
                     'filepath': filepath,
                     'downloadedAt': time.strftime('%Y-%m-%d %H:%M:%S')
                 }
@@ -786,15 +813,32 @@ def download():
                 print(f"❌ Downloaded file not found for: {title}")
                 return jsonify({'error': 'Downloaded file not found'}), 500
         else:
-            print(f"❌ Download command failed: {result.stderr}")
-            # Try without cookies if cookies fail
-            if "Sign in to confirm" in result.stderr:
-                print("🔄 Trying download without cookies...")
-                cmd_without_cookies = [c for c in cmd if c != '--cookies' and c != 'cookies.txt']
+            error_msg = result.stderr
+            print(f"❌ Download command failed: {error_msg}")
+            # Fallback without cookies if bot error and cookies were used
+            if "Sign in to confirm" in error_msg and os.path.exists('cookies.txt'):
+                print("🔄 Retrying without cookies...")
+                cmd_without_cookies = [c for c in cmd if c not in ['--cookies', 'cookies.txt']]
                 result = subprocess.run(cmd_without_cookies, capture_output=True, text=True, timeout=300)
                 if result.returncode == 0:
-                    return jsonify({'error': 'Download requires authentication. Please add cookies.txt file.'}), 400
-            return jsonify({'error': 'Download failed'}), 500
+                    # Recheck for file after fallback
+                    possible_files = [f"{filename}.mp3", f"{filename}.webm"]
+                    filepath = None
+                    for possible in possible_files:
+                        test_path = os.path.join('downloads', possible)
+                        if os.path.exists(test_path):
+                            filepath = test_path
+                            break
+                    if filepath:
+                        add_metadata_to_file(filepath, title, artist, album, thumbnail)
+                        # ... (repeat song_info logic as above)
+                        return send_file(filepath, as_attachment=True, download_name=download_name)
+                    else:
+                        return jsonify({'error': 'Fallback download succeeded but file missing'}), 500
+                else:
+                    error_msg = result.stderr
+                    print(f"❌ Fallback failed: {error_msg}")
+            return jsonify({'error': f'Download failed: {error_msg[:200]}...'}), 500
             
     except Exception as e:
         print(f"❌ Download error details: {e}")
