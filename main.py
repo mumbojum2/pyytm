@@ -22,9 +22,9 @@ import signal
 app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
 
-# Create directories
-os.makedirs('downloads', exist_ok=True)
-os.makedirs('user_data', exist_ok=True)
+# Create directories with absolute paths
+os.makedirs('/home/akiva/pyytm/downloads', exist_ok=True)
+os.makedirs('/home/akiva/pyytm/user_data', exist_ok=True)
 
 # Storage - will be loaded from user data
 songs_db = []
@@ -80,7 +80,7 @@ def install_dependencies():
 #        subprocess.run(['apt-get', 'update'], check=False, capture_output=True)
 #        subprocess.run(['apt-get', 'install', '-y', 'ffmpeg'], check=False, capture_output=True)
 #        print("✅ ffmpeg installed")
-#   except Exception as e:
+#    except Exception as e:
 #        print(f"⚠️ ffmpeg issues: {e}")
 
 install_dependencies()
@@ -91,16 +91,16 @@ def load_user_data():
     global songs_db, artists_db, search_history
     
     try:
-        if os.path.exists('user_data/songs.json'):
-            with open('user_data/songs.json', 'r') as f:
+        if os.path.exists('/home/akiva/pyytm/user_data/songs.json'):
+            with open('/home/akiva/pyytm/user_data/songs.json', 'r') as f:
                 songs_db = json.load(f)
         
-        if os.path.exists('user_data/artists.json'):
-            with open('user_data/artists.json', 'r') as f:
+        if os.path.exists('/home/akiva/pyytm/user_data/artists.json'):
+            with open('/home/akiva/pyytm/user_data/artists.json', 'r') as f:
                 artists_db = json.load(f)
                 
-        if os.path.exists('user_data/search_history.json'):
-            with open('user_data/search_history.json', 'r') as f:
+        if os.path.exists('/home/akiva/pyytm/user_data/search_history.json'):
+            with open('/home/akiva/pyytm/user_data/search_history.json', 'r') as f:
                 search_history = json.load(f)
                 
         print("✅ User data loaded successfully")
@@ -110,13 +110,13 @@ def load_user_data():
 def save_user_data():
     """Save user data to files"""
     try:
-        with open('user_data/songs.json', 'w') as f:
+        with open('/home/akiva/pyytm/user_data/songs.json', 'w') as f:
             json.dump(songs_db, f)
             
-        with open('user_data/artists.json', 'w') as f:
+        with open('/home/akiva/pyytm/user_data/artists.json', 'w') as f:
             json.dump(artists_db, f)
             
-        with open('user_data/search_history.json', 'w') as f:
+        with open('/home/akiva/pyytm/user_data/search_history.json', 'w') as f:
             json.dump(search_history, f)
             
         print("💾 User data saved")
@@ -227,60 +227,34 @@ def get_popular_recommendations():
         from ytmusicapi import YTMusic
         yt = YTMusic()
         
-        charts = yt.get_charts(country='US')
+        charts = yt.get_charts(country='US') or {}  # Safely handle None
         recommendations = []
         
-        for chart in charts.get('charts', []):
-            if chart['title'] in ['Top songs', 'Trending']:
-                for track in chart['items'][:12]:
-                    try:
-                        video_id = track.get('videoId')
-                        if video_id:
-                            recommendations.append({
-                                'id': video_id,
-                                'title': track['title'],
-                                'artist': ", ".join([artist['name'] for artist in track.get('artists', [])]),
-                                'thumbnail': track['thumbnails'][-1]['url'] if track.get('thumbnails') else "",
-                                'type': 'song',
-                                'url': f"https://www.youtube.com/watch?v={video_id}",
-                                'views': 'Popular'
-                            })
-                    except:
-                        continue
-                break
-                
-        return recommendations
+        # Safely access songs chart
+        songs_chart = next((chart for chart in charts.get('charts', []) if chart['title'] in ['Top songs', 'Trending']), None)
+        if songs_chart:
+            for track in songs_chart.get('items', [])[:12]:
+                try:
+                    video_id = track.get('videoId')
+                    if video_id:
+                        recommendations.append({
+                            'id': video_id,
+                            'title': track.get('title', 'Unknown Track'),
+                            'artist': ", ".join([artist['name'] for artist in track.get('artists', [])]) or 'Unknown Artist',
+                            'thumbnail': track['thumbnails'][-1]['url'] if track.get('thumbnails') else "",
+                            'type': 'song',
+                            'url': f"https://www.youtube.com/watch?v={video_id}",
+                            'views': 'Popular'
+                        })
+                except Exception as track_e:
+                    print(f"Track parsing error: {track_e}")
+                    continue
+        else:
+            print("⚠️ No 'Top songs' or 'Trending' chart found")
+        
+        return recommendations[:12] if recommendations else get_fallback_recommendations()
     except Exception as e:
         print(f"Popular recommendations error: {e}")
-        # Enhanced fallback with more robust parsing
-        try:
-            # Retry with different params or fallback to a static list if parsing fails
-            recommendations = []
-            for item in charts.get('charts', [])[:1]:  # Take first chart
-                for track in item.get('items', [])[:12]:
-                    try:
-                        video_id = track.get('videoId') or track.get('video_id', '')
-                        if video_id:
-                            title = track.get('title', 'Unknown Track')
-                            artists = track.get('artists', [{'name': 'Unknown Artist'}])
-                            artist_str = ", ".join([a.get('name', 'Unknown') for a in artists])
-                            thumb = track.get('thumbnails', [{}])[-1].get('url', '')
-                            recommendations.append({
-                                'id': video_id,
-                                'title': title,
-                                'artist': artist_str,
-                                'thumbnail': thumb,
-                                'type': 'song',
-                                'url': f"https://www.youtube.com/watch?v={video_id}",
-                                'views': 'Popular'
-                            })
-                    except Exception as track_e:
-                        print(f"Track parsing error: {track_e}")
-                        continue
-            if recommendations:
-                return recommendations[:12]
-        except Exception as retry_e:
-            print(f"Retry failed: {retry_e}")
         return get_fallback_recommendations()
 
 def get_fallback_recommendations():
@@ -706,7 +680,7 @@ def export_user_data():
         }
         
         export_filename = f"musicgrab_backup_{time.strftime('%Y%m%d_%H%M%S')}.json"
-        export_path = os.path.join('user_data', export_filename)
+        export_path = os.path.join('/home/akiva/pyytm/user_data', export_filename)
         
         with open(export_path, 'w') as f:
             json.dump(export_data, f)
@@ -748,158 +722,49 @@ def import_user_data():
 @app.route('/api/download', methods=['POST'])
 def download():
     data = request.get_json()
-    if not data:
-        return jsonify({'error': 'No JSON data provided'}), 400
-        
-    url = data.get('url', '')
-    title = data.get('title', 'Unknown')
-    artist = data.get('artist', 'Unknown')
+    video_id = data.get('videoId')
+    title = data.get('title', 'Unknown Title')
+    artist = data.get('artist', 'Unknown Artist')
     album = data.get('album', '')
-    thumbnail = data.get('thumbnail', '')
+    thumbnail_url = data.get('thumbnail', '')
+    if not video_id:
+        return jsonify({'error': 'No videoId provided'}), 400
     
-    if not url:
-        return jsonify({'error': 'No URL provided'}), 400
-
-    try:
-        print(f"🔄 Starting download: {title} by {artist}")
-        
-        # Create safe filename
-        safe_title = sanitize_filename(title)
-        safe_artist = sanitize_filename(artist)
-        filename = f"{safe_artist} - {safe_title}" if safe_artist != "Unknown" else safe_title
-        filename = filename[:100]
-        
-        # Download directly as MP3 with proper filename
-        output_template = os.path.join('downloads', f'{filename}.%(ext)s')  # Use .%(ext)s for flexibility
-        
-        # Base evasion options (always include)
-        evasion_opts = [
-            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.7390.123 Safari/537.36',  # Latest Chrome UA (Oct 2025)
-            '--referer', 'https://www.youtube.com/',  # Mimic browser referral
-        ]
-        
-        # Base command with format selection and evasion
+    # Use temporary file to avoid cluttering Pi storage
+    with tempfile.NamedTemporaryFile(suffix='.m4a', dir='/home/akiva/pyytm/downloads', delete=False) as temp_file:
+        output_path = temp_file.name
+        cookie_path = "/home/akiva/pyytm/cookies.txt"
         cmd = [
-            sys.executable, '-m', 'yt_dlp',
-            '-f', 'bestaudio',  # Auto-pick best available audio format
-            '-x', '--audio-format', 'mp3',
-            '--audio-quality', '0',  # Best quality during conversion
-            '--add-metadata',
-            '--embed-thumbnail',
-            '--parse-metadata', 'title:%(title)s',
-            '--parse-metadata', 'uploader:%(artist)s',
-            '-o', output_template,
-            '--no-warnings',
-            '--sleep-interval', '5',  # Rate limit
-            '--max-sleep-interval', '10',
-            '--extractor-args', 'youtube:player_client=ios',  # iOS client bypass
-        ] + evasion_opts  # Add UA and referer
-
-        attempts = 0
-        max_attempts = 2  # Cookies -> No cookies
-        final_error = None
-        
-        while attempts < max_attempts:
-            # Copy base cmd
-            current_cmd = cmd[:]
+            "yt-dlp",
+            "--format", "bestaudio[ext=m4a]/bestaudio[ext=mp3]/140",
+            "--output", output_path,
+            "--cookies", cookie_path if os.path.exists(cookie_path) else "",
+            f"https://www.youtube.com/watch?v={video_id}"
+        ]
+    
+        try:
+            print(f"🔄 Starting download: {video_id}")
+            print(f"🔑 Using cookies for auth" if os.path.exists(cookie_path) else "🔑 No cookies used")
+            print(f"📥 Running download command (attempt 1)...")
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             
-            # Add cookies if file exists and first attempt
-            if attempts == 0 and os.path.exists('cookies.txt'):
-                current_cmd.extend(['--cookies', 'cookies.txt'])
-                print("🔑 Using cookies for auth")
-            else:
-                print(f"⚠️ Attempt {attempts + 1}: No cookies")
+            # Add metadata
+            add_metadata_to_file(output_path, title, artist, album, thumbnail_url)
             
-            # Append URL (critical fix: ensure URL is always added)
-            current_cmd.append(url)
+            print(f"✅ Download successful: {output_path}")
             
-            print(f"📥 Running download command (attempt {attempts + 1})...")
-            result = subprocess.run(current_cmd, capture_output=True, text=True, timeout=300)
+            # Send file to client
+            download_name = f"{sanitize_filename(artist)} - {sanitize_filename(title)}.m4a"
+            response = send_file(output_path, as_attachment=True, download_name=download_name)
             
-            if result.returncode == 0:
-                print(f"✅ Download completed for: {title}")
-                time.sleep(2)  # Longer sleep for processing
-                
-                # Find the downloaded file
-                possible_files = [f"{filename}.mp3", f"{filename}.m4a", f"{filename}.webm"]
-                filepath = None
-                for possible in possible_files:
-                    test_path = os.path.join('downloads', possible)
-                    if os.path.exists(test_path):
-                        filepath = test_path
-                        print(f"📁 Found file: {possible}")
-                        break
-                
-                if filepath:
-                    # Ensure MP3 via FFmpeg if needed
-                    if not filepath.endswith('.mp3'):
-                        mp3_path = filepath.rsplit('.', 1)[0] + '.mp3'
-                        ffmpeg_cmd = ['ffmpeg', '-y', '-i', filepath, '-codec:a', 'libmp3lame', '-qscale:a', '0', mp3_path]
-                        ff_result = subprocess.run(ffmpeg_cmd, capture_output=True)
-                        if ff_result.returncode == 0 and os.path.exists(mp3_path):
-                            filepath = mp3_path
-                            if os.path.exists(filepath.replace('.mp3', '.m4a')):  # Clean up if original exists
-                                os.remove(filepath.replace('.mp3', '.m4a'))
-                            print(f"🔄 Converted to MP3: {mp3_path}")
-                        else:
-                            print(f"⚠️ FFmpeg conversion failed: {ff_result.stderr}")
-                    
-                    # Add metadata
-                    add_metadata_to_file(filepath, title, artist, album, thumbnail)
-                    
-                    # Save to DB
-                    song_info = {
-                        'id': len(songs_db) + 1,
-                        'title': title,
-                        'artist': artist,
-                        'album': album,
-                        'filename': os.path.basename(filepath),
-                        'filepath': filepath,
-                        'downloadedAt': time.strftime('%Y-%m-%d %H:%M:%S')
-                    }
-                    songs_db.append(song_info)
-                    
-                    if artist in artists_db:
-                        artists_db[artist] += 1
-                    else:
-                        artists_db[artist] = 1
-                    
-                    save_user_data()
-                    
-                    # Send file
-                    download_name = f"{safe_artist} - {safe_title}.mp3"
-                    return send_file(filepath, as_attachment=True, download_name=download_name)
-                
-                # If no file but success, rare—retry
-                attempts += 1
-                continue
-            else:
-                error_msg = result.stderr
-                print(f"❌ Attempt {attempts + 1} failed: {error_msg[:200]}")
-                final_error = error_msg
-                if "Sign in to confirm" in error_msg:
-                    attempts += 1  # Proceed to fallback
-                else:
-                    break  # Other error, stop
-        
-        # All attempts failed
-        tips = []
-        if "Sign in to confirm" in final_error:
-            tips = [
-                "1. Upload a fresh 'cookies.txt' file (export from your logged-in browser using the 'cookies.txt' extension).",
-                "2. Try a VPN to change your server's IP (common on shared hosts like Koyeb).",
-                "3. Wait 2-3 days and retry—YouTube flags IPs temporarily."
-            ]
-        return jsonify({
-            'error': f'Download failed after retries: {final_error[:150]}...',
-            'tips': tips
-        }), 500
-            
-    except Exception as e:
-        print(f"❌ Download error details: {e}")
-        import traceback
-        print(f"📋 Full traceback: {traceback.format_exc()}")
-        return jsonify({'error': f'Download failed: {str(e)}'}), 500
+            # Clean up temporary file
+            os.remove(output_path)
+            return response
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Download failed: {e.stderr}")
+            if os.path.exists(output_path):
+                os.remove(output_path)
+            return jsonify({'error': f'Download failed: {e.stderr}'}), 500
 
 @app.route('/api/songs')
 def get_songs():
@@ -916,7 +781,7 @@ def play_song(song_id):
     if not song:
         return jsonify({'error': 'Song not found'}), 404
         
-    filepath = os.path.join('downloads', song['filename'])
+    filepath = os.path.join('/home/akiva/pyytm/downloads', song['filename'])
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 404
         
@@ -929,7 +794,7 @@ def download_file(song_id):
     if not song:
         return jsonify({'error': 'Song not found'}), 404
         
-    filepath = os.path.join('downloads', song['filename'])
+    filepath = os.path.join('/home/akiva/pyytm/downloads', song['filename'])
     if not os.path.exists(filepath):
         return jsonify({'error': 'File not found'}), 404
         
@@ -959,5 +824,3 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
-
