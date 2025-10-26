@@ -30,6 +30,21 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
+    <!-- Lazy loading polyfill for older browsers -->
+    <script>
+        if ('loading' in HTMLImageElement.prototype) {
+            // Native support
+        } else {
+            // Polyfill (simple version)
+            document.addEventListener('DOMContentLoaded', () => {
+                const images = document.querySelectorAll('img[loading="lazy"]');
+                images.forEach(img => {
+                    img.src = img.dataset.src || img.src;
+                });
+            });
+        }
+    </script>
+    
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
         const API_BASE = window.location.origin;
@@ -228,17 +243,24 @@
                         })
                     });
 
-                    const data = await response.json();
-                    if (response.ok && data.success) {
+                    if (response.ok) {
+                        // Direct file response, trigger download
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.style.display = 'none';
+                        a.href = url;
+                        a.download = `${song.artist} - ${song.title}.mp3`.replace(/[<>:"/\\|?*]/g, '');
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                        
                         showMessage(`✅ "${song.title}" downloaded!`, 'success');
                         await loadSongs();
                         await loadArtists();
-                        
-                        // Auto-download to computer
-                        setTimeout(() => {
-                            downloadToComputer(data.song.id);
-                        }, 1000);
                     } else {
+                        const data = await response.json();
                         throw new Error(data.error || 'Download failed');
                     }
                 } catch (error) {
@@ -447,6 +469,8 @@
                                     <img 
                                         src={nowPlaying.thumbnail} 
                                         alt={nowPlaying.title}
+                                        loading="lazy"
+                                        decoding="async"
                                         className="w-12 h-12 rounded-lg object-cover"
                                         onError={(e) => {
                                             e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
@@ -663,6 +687,8 @@
                                                     <img 
                                                         src={rec.thumbnail} 
                                                         alt={rec.title}
+                                                        loading="lazy"
+                                                        decoding="async"
                                                         className="w-full aspect-square object-cover rounded-xl"
                                                         onError={(e) => {
                                                             e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMTAwIDEzMEwxMjAgMTEwTDEwMCA5MEw4MCAxMTBMMTAwIDEzMFoiIGZpbGw9IiM4RThFOEUiLz48cGF0aCBkPSJNODAgMTQwTDEyMCAxNDBMMTIwIDgwTDgwIDgwTDgwIDE0MFoiIGZpbGw9IiM4RThFOEUiLz48L3N2Zz4=';
@@ -702,6 +728,8 @@
                                                             <img 
                                                                 src={artist.thumbnail} 
                                                                 alt={artist.name}
+                                                                loading="lazy"
+                                                                decoding="async"
                                                                 className="w-20 h-20 rounded-full mx-auto mb-3 object-cover"
                                                                 onError={(e) => {
                                                                     e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSI0MCIgY3k9IjQwIiByPSI0MCIgZmlsbD0iI0VFNUU1RSIvPjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE1IiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTI1IDY1QzI1IDU3IDMyIDUwIDQwIDUwQzQ4IDUwIDU1IDU3IDU1IDY1SDI1WiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
@@ -725,6 +753,8 @@
                                                             <img 
                                                                 src={album.thumbnail} 
                                                                 alt={album.title}
+                                                                loading="lazy"
+                                                                decoding="async"
                                                                 className="w-full aspect-square object-cover rounded-xl mb-3"
                                                                 onError={(e) => {
                                                                     e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMTAwIDEzMEwxMjAgMTEwTDEwMCA5MEw4MCAxMTBMMTAwIDEzMFoiIGZpbGw9IiM4RThFOEUiLz48cGF0aCBkPSJNODAgMTQwTDEyMCAxNDBMMTIwIDgwTDgwIDgwTDgwIDE0MFoiIGZpbGw9IiM4RThFOEUiLz48L3N2Zz4=';
@@ -751,12 +781,14 @@
                                                                     <img 
                                                                         src={song.thumbnail} 
                                                                         alt={song.title}
+                                                                        loading="lazy"
+                                                                        decoding="async"
                                                                         className={`w-12 h-12 rounded-lg object-cover ${
                                                                             loadedThumbnails.has(song.id) ? '' : 'thumbnail-loading'
                                                                         }`}
                                                                         onLoad={() => handleThumbnailLoad(song.id)}
                                                                         onError={(e) => {
-                                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDM2IDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
+                                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
                                                                         }}
                                                                     />
                                                                 </div>
@@ -865,6 +897,8 @@
                                                                     <img 
                                                                         src={song.thumbnail} 
                                                                         alt={song.title}
+                                                                        loading="lazy"
+                                                                        decoding="async"
                                                                         className="w-12 h-12 rounded-lg object-cover"
                                                                     />
                                                                     <div className="flex-1">
@@ -907,6 +941,8 @@
                                                                 <img 
                                                                     src={artist.thumbnail} 
                                                                     alt={artist.name}
+                                                                    loading="lazy"
+                                                                    decoding="async"
                                                                     className="w-20 h-20 rounded-full mx-auto mb-4 object-cover"
                                                                 />
                                                                 <h3 className="font-semibold text-white text-lg mb-2">{artist.name}</h3>
@@ -940,6 +976,8 @@
                                                                 <img 
                                                                     src={album.thumbnail} 
                                                                     alt={album.title}
+                                                                    loading="lazy"
+                                                                    decoding="async"
                                                                     className="w-full aspect-square object-cover rounded-xl mb-3"
                                                                 />
                                                                 <h3 className="font-semibold text-white text-sm mb-1 truncate">{album.title}</h3>
@@ -1000,9 +1038,11 @@
                                                     <img 
                                                         src={song.thumbnail} 
                                                         alt={song.title}
+                                                        loading="lazy"
+                                                        decoding="async"
                                                         className="w-12 h-12 rounded-lg object-cover"
                                                         onError={(e) => {
-                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDM2IDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
+                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
                                                         }}
                                                     />
                                                     <div className="flex-1">
@@ -1085,6 +1125,8 @@
                                         <img 
                                             src={artistPage.thumbnail} 
                                             alt={artistPage.artist}
+                                            loading="lazy"
+                                            decoding="async"
                                             className="w-32 h-32 rounded-full object-cover"
                                             onError={(e) => {
                                                 e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgdmlld0JveD0iMCAwIDEyOCAxMjgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9IiNFRTVFNUUiLz48Y2lyY2xlIGN4PSI2NCIgY3k9IjQ4IiByPSIyNCIgZmlsbD0iIzhFOEU4RSIvPjxwYXRoIGQ9Ik00MCAxMDRDNDAgODggNTYgNzYgNjQgNzZDNzIgNzYgODggODggODggMTA0SDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
@@ -1109,9 +1151,11 @@
                                                     <img 
                                                         src={song.thumbnail} 
                                                         alt={song.title}
+                                                        loading="lazy"
+                                                        decoding="async"
                                                         className="w-12 h-12 rounded-lg object-cover"
                                                         onError={(e) => {
-                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDM2IDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
+                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
                                                         }}
                                                     />
                                                 </div>
