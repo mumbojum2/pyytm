@@ -155,12 +155,14 @@ def get_personalized_recommendations():
         for shelf in home_feed[:8]:  # First 8 shelves
             for content in shelf.get('contents', [])[:6]:  # First 6 items per shelf
                 if 'title' in content:
+                    video_id = content.get('videoId')
                     recommendations.append({
-                        'id': content.get('videoId', content.get('playlistId', str(len(recommendations)))),
+                        'id': video_id or content.get('playlistId', str(len(recommendations))),
                         'title': content['title'],
                         'artist': content.get('subtitle', 'YouTube Music'),
                         'thumbnail': content['thumbnails'][-1]['url'] if content.get('thumbnails') else "",
-                        'type': 'song' if 'videoId' in content else 'playlist'
+                        'type': 'song' if 'videoId' in content else 'playlist',
+                        'url': f"https://www.youtube.com/watch?v={video_id}" if video_id else ""
                     })
         
         # Clean up temp file
@@ -185,12 +187,14 @@ def get_popular_recommendations():
             if chart['title'] in ['Top songs', 'Trending']:
                 for track in chart['items'][:12]:
                     try:
+                        video_id = track.get('videoId')
                         recommendations.append({
-                            'id': track['videoId'],
+                            'id': video_id,
                             'title': track['title'],
                             'artist': ", ".join([artist['name'] for artist in track.get('artists', [])]),
                             'thumbnail': track['thumbnails'][-1]['url'] if track.get('thumbnails') else "",
-                            'type': 'song'
+                            'type': 'song',
+                            'url': f"https://www.youtube.com/watch?v={video_id}" if video_id else ""
                         })
                     except:
                         continue
@@ -203,10 +207,10 @@ def get_popular_recommendations():
 
 def get_fallback_recommendations():
     return [
-        {'id': '1', 'title': 'Today\'s Top Hits', 'artist': 'Various Artists', 'thumbnail': '', 'type': 'playlist'},
-        {'id': '2', 'title': 'Pop Rising', 'artist': 'Popular Pop Music', 'thumbnail': '', 'type': 'playlist'},
-        {'id': '3', 'title': 'RapCaviar', 'artist': 'Hip Hop & Rap', 'thumbnail': '', 'type': 'playlist'},
-        {'id': '4', 'title': 'Mood Booster', 'artist': 'Feel Good Hits', 'thumbnail': '', 'type': 'playlist'}
+        {'id': '1', 'title': 'Today\'s Top Hits', 'artist': 'Various Artists', 'thumbnail': '', 'type': 'playlist', 'url': ''},
+        {'id': '2', 'title': 'Pop Rising', 'artist': 'Popular Pop Music', 'thumbnail': '', 'type': 'playlist', 'url': ''},
+        {'id': '3', 'title': 'RapCaviar', 'artist': 'Hip Hop & Rap', 'thumbnail': '', 'type': 'playlist', 'url': ''},
+        {'id': '4', 'title': 'Mood Booster', 'artist': 'Feel Good Hits', 'thumbnail': '', 'type': 'playlist', 'url': ''}
     ]
 
 def get_library_data():
@@ -235,13 +239,15 @@ def get_library_data():
         try:
             library_songs = ytmusic.get_library_songs(limit=100)
             for song in library_songs:
+                video_id = song.get('videoId')
                 library_data['songs'].append({
-                    'id': song['videoId'],
+                    'id': video_id,
                     'title': song['title'],
                     'artist': song['artists'][0]['name'] if song.get('artists') else 'Unknown',
                     'album': song.get('album', {}).get('name', ''),
                     'duration': song.get('duration', '0:00'),
-                    'thumbnail': song['thumbnails'][-1]['url'] if song.get('thumbnails') else ""
+                    'thumbnail': song['thumbnails'][-1]['url'] if song.get('thumbnails') else "",
+                    'url': f"https://www.youtube.com/watch?v={video_id}" if video_id else ""
                 })
         except Exception as e:
             print(f"Library songs error: {e}")
@@ -293,7 +299,7 @@ def get_library_data():
         return {'songs': [], 'albums': [], 'artists': [], 'playlists': []}
 
 def fast_youtube_search(query, max_results=10):
-    print(f"🔍 Searching for: '{query}'")  # Debug
+    print(f"🔍 Searching for: '{query}'")
     if not query:
         return {'songs': [], 'artists': [], 'albums': []}
 
@@ -323,6 +329,9 @@ def fast_youtube_search(query, max_results=10):
                     if song.get('thumbnails'):
                         thumbnail_url = song['thumbnails'][-1]['url'] if len(song['thumbnails']) > 1 else song['thumbnails'][0]['url']
                     
+                    # Get actual view count
+                    views = get_accurate_views(video_id)
+                    
                     songs.append({
                         'id': video_id,
                         'title': song.get('title', 'Unknown Title'),
@@ -331,9 +340,9 @@ def fast_youtube_search(query, max_results=10):
                         'artist': artists_str,
                         'album': song.get('album', {}).get('name', '') if song.get('album') else '',
                         'thumbnail': thumbnail_url,
-                        'views': 'Unknown views',
-                        'is_explicit': False,
-                        'raw_views': 0
+                        'views': format_views(views),
+                        'is_explicit': any(word in song.get('title', '').lower() for word in ['explicit', 'clean']),
+                        'raw_views': views
                     })
                 except Exception as song_error:
                     print(f"⚠️ Error processing song: {song_error}")
@@ -394,13 +403,37 @@ def fast_youtube_search(query, max_results=10):
         return {'songs': [], 'artists': [], 'albums': []}
 
 def get_accurate_views(video_id):
+    """Get actual view count from YouTube"""
+    if not video_id:
+        return 0
+        
     try:
         from ytmusicapi import YTMusic
         yt = YTMusic()
         song_details = yt.get_song(video_id)
-        view_count_str = song_details['videoDetails']['viewCount']
-        return int(view_count_str) if view_count_str else 0
-    except:
+        
+        # Try multiple possible locations for view count
+        view_count = song_details.get('videoDetails', {}).get('viewCount')
+        if not view_count:
+            view_count = song_details.get('viewCount')
+        if not view_count:
+            # Try to find in tracking params or other fields
+            for key, value in song_details.items():
+                if 'view' in key.lower() and isinstance(value, (int, str)):
+                    view_count = value
+                    break
+        
+        if view_count:
+            # Convert to integer, handling string formats
+            if isinstance(view_count, str):
+                # Remove commas and non-numeric characters
+                view_count = re.sub(r'[^\d]', '', view_count)
+            return int(view_count) if view_count else 0
+        else:
+            return 0
+            
+    except Exception as e:
+        print(f"⚠️ View count error for {video_id}: {e}")
         return 0
 
 def get_artist_songs(artist_id):
@@ -409,29 +442,36 @@ def get_artist_songs(artist_id):
         yt = YTMusic()
         
         artist_info = yt.get_artist(artist_id)
-        artist_songs = yt.get_artist_albums(artist_id, limit=50)
+        
+        # Get artist albums
+        artist_albums = yt.get_artist_albums(artist_id)
         
         songs = []
-        for album in artist_songs:
+        for album in artist_albums[:5]:  # Limit to 5 albums
             try:
-                album_songs = yt.get_album(album['browseId'])
-                for track in album_songs['tracks']:
+                album_details = yt.get_album(album['browseId'])
+                for track in album_details['tracks']:
+                    video_id = track.get('videoId')
+                    views = get_accurate_views(video_id)
+                    
                     songs.append({
-                        'id': track['videoId'],
+                        'id': video_id,
                         'title': track['title'],
                         'duration': track.get('duration', '0:00'),
                         'album': album['title'],
                         'thumbnail': track['thumbnails'][0]['url'] if track.get('thumbnails') else "",
-                        'views': format_views(get_accurate_views(track['videoId']))
+                        'url': f"https://www.youtube.com/watch?v={video_id}" if video_id else "",
+                        'views': format_views(views)
                     })
-            except:
+            except Exception as album_error:
+                print(f"Album error: {album_error}")
                 continue
         
         return {
             'artist': artist_info.get('name', 'Unknown Artist'),
             'description': artist_info.get('description', ''),
             'thumbnail': artist_info['thumbnails'][-1]['url'] if artist_info.get('thumbnails') else "",
-            'songs': songs[:50]
+            'songs': songs[:20]  # Limit to 20 songs
         }
     except Exception as e:
         print(f"Artist songs error: {e}")
@@ -529,10 +569,14 @@ def search():
         return jsonify({'error': 'No query provided'}), 400
 
     try:
+        print(f"🔍 API Search called for: '{query}'")
         results = fast_youtube_search(query, 10)
+        print(f"✅ API Search completed for: '{query}'")
         return jsonify(results)
     except Exception as e:
-        print(f"Search error details: {str(e)}")  # Add this line for debugging
+        print(f"❌ API Search failed for '{query}': {e}")
+        import traceback
+        print(f"📋 Full traceback: {traceback.format_exc()}")
         return jsonify({'error': f'Search failed: {str(e)}'}), 500
 
 @app.route('/api/artist/<artist_id>')
@@ -564,6 +608,7 @@ def get_search_history():
 
 @app.route('/api/authenticate', methods=['POST'])
 def authenticate():
+    """Authenticate with browser.json"""
     global browser_json_content, user_authenticated
     
     try:
@@ -603,7 +648,7 @@ def authenticate():
         
     except Exception as e:
         user_authenticated = False
-        print(f"Authentication error: {e}")  # Add debugging
+        print(f"Authentication error: {e}")
         return jsonify({'error': f'Authentication failed: {str(e)}'}), 400
 
 @app.route('/api/export-data')
@@ -673,6 +718,8 @@ def download():
         return jsonify({'error': 'No URL provided'}), 400
 
     try:
+        print(f"🔄 Starting download: {title} by {artist}")
+        
         # Create safe filename
         safe_title = sanitize_filename(title)
         safe_artist = sanitize_filename(artist)
@@ -704,6 +751,7 @@ def download():
 
         cmd.append(url)
 
+        print(f"📥 Running download command...")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         
         # Clean up temp cookie file
@@ -711,6 +759,7 @@ def download():
             os.unlink(cookie_file)
         
         if result.returncode == 0:
+            print(f"✅ Download completed for: {title}")
             time.sleep(1)
             
             # Find the downloaded file
@@ -748,11 +797,16 @@ def download():
                     
                 return jsonify({'success': True, 'song': song_info})
             else:
+                print(f"❌ Downloaded file not found for: {title}")
                 return jsonify({'error': 'Downloaded file not found'}), 500
         else:
+            print(f"❌ Download command failed: {result.stderr}")
             return jsonify({'error': 'Download failed'}), 500
             
     except Exception as e:
+        print(f"❌ Download error details: {e}")
+        import traceback
+        print(f"📋 Full traceback: {traceback.format_exc()}")
         return jsonify({'error': f'Download failed: {str(e)}'}), 500
 
 @app.route('/api/songs')
@@ -793,25 +847,23 @@ def download_file(song_id):
     return send_file(filepath, as_attachment=True, download_name=download_name)
 
 def format_views(views):
-    if not views:
+    if not views or views == 0:
         return "No views"
+    
     try:
-        if isinstance(views, str):
-            views = int(re.sub(r'[^\d]', '', views))
         views = int(views)
     except:
         return "No views"
-    if views >= 1000000:
+        
+    if views >= 1000000000:
+        return f"{views / 1000000000:.1f}B views"
+    elif views >= 1000000:
         return f"{views / 1000000:.1f}M views"
-    if views >= 1000:
+    elif views >= 1000:
         return f"{views / 1000:.1f}K views"
-    return f"{views} views"
+    else:
+        return f"{views:,} views"
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8000))  # Change to 8000
+    port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
-
-
-
-
