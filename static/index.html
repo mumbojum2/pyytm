@@ -425,6 +425,41 @@
                 return songs.filter(song => song.artist === artistName);
             };
 
+            const handlePlaySong = async (song) => {
+    try {
+        // Try to get direct audio stream
+        const response = await fetch(`${API_BASE}/api/stream/${song.id}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            // Use the proxy to avoid CORS issues
+            const proxyUrl = `${API_BASE}/api/proxy-audio?url=${encodeURIComponent(data.streamUrl)}`;
+            
+            setNowPlaying({ 
+                ...song, 
+                audioUrl: proxyUrl,
+                isStream: true 
+            });
+            
+            if (audioRef.current) {
+                audioRef.current.src = proxyUrl;
+                audioRef.current.load();
+                audioRef.current.play().catch(e => {
+                    console.log('Auto-play prevented:', e);
+                    // User interaction required - we'll let them click play
+                });
+            }
+            
+            showMessage(`🎵 Now playing: ${song.title}`, 'success');
+        } else {
+            throw new Error('Could not get audio stream');
+        }
+    } catch (error) {
+        console.error('Play error:', error);
+        showMessage('Failed to play song. Try downloading instead.', 'error');
+    }
+};
+
             const tabs = [
                 { id: 'home', label: 'Home', icon: 'fas fa-home' },
                 { id: 'search', label: 'Search', icon: 'fas fa-search' },
@@ -768,81 +803,96 @@
                                             </div>
                                         )}
 
-                                        {/* Songs */}
-                                        {searchResults.songs.length > 0 && (
-                                            <div>
-                                                <h2 className="text-2xl font-bold text-white mb-4">Songs</h2>
-                                                <div className="space-y-2">
-                                                    {searchResults.songs.map((song, index) => (
-                                                        <div key={`${song.id}-${index}`} className="bg-white/10 rounded-xl p-4 hover:bg-white/20 transition-all backdrop-blur-sm">
-                                                            <div className="flex items-center gap-4">
-                                                                <div className="relative flex-shrink-0">
-                                                                    <img 
-                                                                        src={song.thumbnail} 
-                                                                        alt={song.title}
-                                                                        loading="lazy"
-                                                                        decoding="async"
-                                                                        className={`w-12 h-12 rounded-lg object-cover ${
-                                                                            loadedThumbnails.has(song.id) ? '' : 'thumbnail-loading'
-                                                                        }`}
-                                                                        onLoad={() => handleThumbnailLoad(song.id)}
-                                                                        onError={(e) => {
-                                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
-                                                                        }}
-                                                                    />
-                                                                </div>
-                                                                
-                                                                <div className="flex-1 min-w-0">
-                                                                    <div className="flex items-center mb-1">
-                                                                        <h3 className="font-semibold text-white text-base truncate">
-                                                                            {song.title}
-                                                                        </h3>
-                                                                        {song.is_explicit && (
-                                                                            <div className="explicit-badge" title="Explicit">
-                                                                                E
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                    
-                                                                    <div className="text-sm text-white/70 mb-1">
-                                                                        <span className="font-medium">{song.artist}</span>
-                                                                        {song.album && <span> • {song.album}</span>}
-                                                                    </div>
-                                                                    
-                                                                    <div className="flex items-center gap-3 text-xs text-white/60 flex-wrap">
-                                                                        <span>Duration: {song.duration}</span>
-                                                                        <span>•</span>
-                                                                        <span>{song.views}</span>
-                                                                    </div>
-                                                                </div>
-                                                                
-                                                                <button
-                                                                    onClick={() => handleDownload(song)}
-                                                                    disabled={downloading === song.id}
-                                                                    className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 flex-shrink-0 ${
-                                                                        downloading === song.id 
-                                                                            ? 'bg-green-500/20 text-green-300 cursor-not-allowed' 
-                                                                            : 'bg-white/20 text-white hover:bg-white/30'
-                                                                    }`}
-                                                                >
-                                                                    {downloading === song.id ? (
-                                                                        <>
-                                                                            <div className="animate-spin w-4 h-4 border-2 border-green-300 border-t-transparent rounded-full"></div>
-                                                                            <span className="hidden sm:inline">Downloading...</span>
-                                                                        </>
-                                                                    ) : (
-                                                                        <>
-                                                                            <i className="fas fa-download"></i>
-                                                                            <span className="hidden sm:inline">Download</span>
-                                                                        </>
-                                                                    )}
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
+                                       {/* Songs */}
+{searchResults.songs.length > 0 && (
+    <div>
+        <h2 className="text-2xl font-bold text-white mb-4">Songs</h2>
+        <div className="space-y-2">
+            {searchResults.songs.map((song, index) => (
+                <div key={`${song.id}-${index}`} className="bg-white/10 rounded-xl p-4 hover:bg-white/20 transition-all backdrop-blur-sm">
+                    <div className="flex items-center gap-4">
+                        <div className="relative flex-shrink-0">
+                            <img 
+                                src={song.thumbnail} 
+                                alt={song.title}
+                                loading="lazy"
+                                decoding="async"
+                                className={`w-12 h-12 rounded-lg object-cover ${
+                                    loadedThumbnails.has(song.id) ? '' : 'thumbnail-loading'
+                                }`}
+                                onLoad={() => handleThumbnailLoad(song.id)}
+                                onError={(e) => {
+                                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
+                                }}
+                            />
+                            <button
+                                onClick={() => handlePlaySong(song)}
+                                className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                            >
+                                <i className="fas fa-play text-white text-lg"></i>
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center mb-1">
+                                <h3 className="font-semibold text-white text-base truncate">
+                                    {song.title}
+                                </h3>
+                                {song.is_explicit && (
+                                    <div className="explicit-badge" title="Explicit">
+                                        E
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <div className="text-sm text-white/70 mb-1">
+                                <span className="font-medium">{song.artist}</span>
+                                {song.album && <span> • {song.album}</span>}
+                            </div>
+                            
+                            <div className="flex items-center gap-3 text-xs text-white/60 flex-wrap">
+                                <span>Duration: {song.duration}</span>
+                                <span>•</span>
+                                <span>{song.views}</span>
+                            </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => handlePlaySong(song)}
+                                className="bg-white/20 text-white p-2 rounded-lg hover:bg-white/30 transition-all"
+                                title="Play"
+                            >
+                                <i className="fas fa-play"></i>
+                            </button>
+                            <button
+                                onClick={() => handleDownload(song)}
+                                disabled={downloading === song.id}
+                                className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 flex-shrink-0 ${
+                                    downloading === song.id 
+                                        ? 'bg-green-500/20 text-green-300 cursor-not-allowed' 
+                                        : 'bg-white/20 text-white hover:bg-white/30'
+                                }`}
+                            >
+                                {downloading === song.id ? (
+                                    <>
+                                        <div className="animate-spin w-4 h-4 border-2 border-green-300 border-t-transparent rounded-full"></div>
+                                        <span className="hidden sm:inline">Downloading...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="fas fa-download"></i>
+                                        <span className="hidden sm:inline">Download</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    </div>
+)}
 
                                         {searchResults.songs.length === 0 && searchResults.artists.length === 0 && searchResults.albums.length === 0 && (
                                             <div className="text-center py-16">
@@ -1237,3 +1287,4 @@
     </script>
 </body>
 </html>
+
