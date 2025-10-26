@@ -293,6 +293,7 @@ def get_library_data():
         return {'songs': [], 'albums': [], 'artists': [], 'playlists': []}
 
 def fast_youtube_search(query, max_results=10):
+    print(f"Searching for: {query}")  # Debug line
     if not query:
         return {'songs': [], 'artists': [], 'albums': []}
 
@@ -790,5 +791,6 @@ def format_views(views):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000, debug=False)
+
 
 
