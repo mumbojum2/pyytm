@@ -529,6 +529,16 @@ def add_metadata_to_file(filepath, title, artist, album, thumbnail_url=None):
     except Exception as e:
         print(f"⚠️ Metadata error: {e}")
 
+def cleanup_file(filepath, delay=300):
+    """Delete file after delay to allow download"""
+    try:
+        time.sleep(delay)  # Wait for download to complete
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            print(f"🗑️ Cleaned up: {filepath}")
+    except Exception as e:
+        print(f"⚠️ Cleanup error: {e}")
+
 # Load user data at startup
 load_user_data()
 
@@ -719,52 +729,82 @@ def import_user_data():
     except Exception as e:
         return jsonify({'error': f'Import failed: {str(e)}'}), 500
 
+@app.route('/downloads/<filename>')
+def serve_download(filename):
+    """Serve temporary download file"""
+    filepath = os.path.join('/home/akiva/pyytm/downloads', filename)
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
+    
+    return send_file(filepath, as_attachment=True, download_name=filename)
+
 @app.route('/api/download', methods=['POST'])
 def download():
     data = request.get_json()
+    print(f"🔍 Download request payload: {data}")  # Debug logging
+    if not data:
+        return jsonify({'error': 'No JSON data provided'}), 400
+    
     video_id = data.get('videoId')
     title = data.get('title', 'Unknown Title')
     artist = data.get('artist', 'Unknown Artist')
     album = data.get('album', '')
     thumbnail_url = data.get('thumbnail', '')
+    
     if not video_id:
         return jsonify({'error': 'No videoId provided'}), 400
     
-    # Use temporary file to avoid cluttering Pi storage
-    with tempfile.NamedTemporaryFile(suffix='.m4a', dir='/home/akiva/pyytm/downloads', delete=False) as temp_file:
-        output_path = temp_file.name
-        cookie_path = "/home/akiva/pyytm/cookies.txt"
-        cmd = [
-            "yt-dlp",
-            "--format", "bestaudio[ext=m4a]/bestaudio[ext=mp3]/140",
-            "--output", output_path,
-            "--cookies", cookie_path if os.path.exists(cookie_path) else "",
-            f"https://www.youtube.com/watch?v={video_id}"
-        ]
+    # Generate unique filename
+    filename = f"{sanitize_filename(artist)} - {sanitize_filename(title)}_{video_id}.m4a"
+    output_path = os.path.join('/home/akiva/pyytm/downloads', filename)
+    cookie_path = "/home/akiva/pyytm/cookies.txt"
+    cmd = [
+        "yt-dlp",
+        "--format", "bestaudio[ext=m4a]/bestaudio[ext=mp3]/140",
+        "--output", output_path,
+        "--cookies", cookie_path if os.path.exists(cookie_path) else "",
+        f"https://www.youtube.com/watch?v={video_id}"
+    ]
     
-        try:
-            print(f"🔄 Starting download: {video_id}")
-            print(f"🔑 Using cookies for auth" if os.path.exists(cookie_path) else "🔑 No cookies used")
-            print(f"📥 Running download command (attempt 1)...")
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            
-            # Add metadata
-            add_metadata_to_file(output_path, title, artist, album, thumbnail_url)
-            
-            print(f"✅ Download successful: {output_path}")
-            
-            # Send file to client
-            download_name = f"{sanitize_filename(artist)} - {sanitize_filename(title)}.m4a"
-            response = send_file(output_path, as_attachment=True, download_name=download_name)
-            
-            # Clean up temporary file
+    try:
+        print(f"🔄 Starting download: {video_id}")
+        print(f"🔑 Using cookies for auth" if os.path.exists(cookie_path) else "🔑 No cookies used")
+        print(f"📥 Running download command (attempt 1)...")
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        
+        # Add metadata
+        add_metadata_to_file(output_path, title, artist, album, thumbnail_url)
+        
+        # Update songs_db
+        songs_db.append({
+            'id': video_id,
+            'title': title,
+            'artist': artist,
+            'album': album,
+            'filename': filename,
+            'url': f"https://www.youtube.com/watch?v={video_id}",
+            'thumbnail': thumbnail_url,
+            'views': 'Downloaded'
+        })
+        save_user_data()
+        
+        print(f"✅ Download successful: {output_path}")
+        
+        # Schedule cleanup
+        threading.Thread(target=cleanup_file, args=(output_path, 300), daemon=True).start()
+        
+        # Return download URL for frontend
+        download_url = f"/downloads/{filename}"
+        return jsonify({
+            'status': 'success',
+            'downloadUrl': download_url,
+            'filename': filename
+        })
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Download failed: {e.stderr}")
+        if os.path.exists(output_path):
             os.remove(output_path)
-            return response
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Download failed: {e.stderr}")
-            if os.path.exists(output_path):
-                os.remove(output_path)
-            return jsonify({'error': f'Download failed: {e.stderr}'}), 500
+        return jsonify({'error': f'Download failed: {e.stderr}'}), 500
 
 @app.route('/api/songs')
 def get_songs():
