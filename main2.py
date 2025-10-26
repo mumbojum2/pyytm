@@ -23,7 +23,9 @@ app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
 
 # Create directories with absolute paths
-os.makedirs('/home/akiva/pyytm/downloads', exist_ok=True)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DOWNLOAD_DIR = os.path.join(BASE_DIR, 'downloads')
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs('/home/akiva/pyytm/user_data', exist_ok=True)
 
 # Storage - will be loaded from user data
@@ -743,8 +745,9 @@ def download():
     video_id = data.get('videoId')
     title = data.get('title', 'Unknown')
     artist = data.get('artist', 'Unknown')
+    album = data.get('album', '')
+    thumbnail_url = data.get('thumbnail', '')
     format = data.get('format', 'mp3')
-    no_metadata = data.get('no_metadata', False)
 
     if not video_id:
         return jsonify({'error': 'No videoId provided'}), 400
@@ -756,6 +759,19 @@ def download():
 
     # Check if file exists (cache hit)
     if os.path.exists(file_path):
+        print(f"✅ Cache hit for {filename}")
+        add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
+        songs_db.append({
+            'id': video_id,
+            'title': title,
+            'artist': artist,
+            'album': album,
+            'filename': filename,
+            'thumbnail': thumbnail_url,
+            'downloaded_at': time.strftime('%Y-%m-%d %H:%M:%S')
+        })
+        artists_db[artist] = artists_db.get(artist, 0) + 1
+        save_user_data()
         return jsonify({
             'status': 'success',
             'downloadUrl': f"/downloads/{filename}",
@@ -766,22 +782,41 @@ def download():
     ydl_opts = {
         'format': 'bestaudio[ext=mp3]',
         'outtmpl': file_path,
-        'cookiefile': 'cookies.txt',
-        'noplaylist': True
+        'cookiefile': os.path.join(BASE_DIR, 'cookies.txt'),
+        'noplaylist': True,
+        'quiet': True,
+        'no_warnings': True,
+        'noprogress': True
     }
-    if no_metadata:
-        ydl_opts['postprocessors'] = [{'key': 'FFmpegMetadata', 'add_metadata': False}]
-        ydl_opts['writethumbnail'] = False
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+        print(f"✅ Downloaded {filename}")
+
+        # Add metadata and thumbnail
+        add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
+
+        # Update user data
+        songs_db.append({
+            'id': video_id,
+            'title': title,
+            'artist': artist,
+            'album': album,
+            'filename': filename,
+            'thumbnail': thumbnail_url,
+            'downloaded_at': time.strftime('%Y-%m-%d %H:%M:%S')
+        })
+        artists_db[artist] = artists_db.get(artist, 0) + 1
+        save_user_data()
+
         return jsonify({
             'status': 'success',
             'downloadUrl': f"/downloads/{filename}",
             'filename': filename
         })
     except Exception as e:
+        print(f"Download error: {e}")
         return jsonify({'error': str(e)}), 500
         
 @app.route('/api/songs')
@@ -842,5 +877,6 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
