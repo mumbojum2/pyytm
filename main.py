@@ -77,31 +77,58 @@ def add_metadata(file_path, title, artist, album, thumbnail_url):
 def home():
     try:
         recommendations = []
-        featured = [
-            {'id': '1', 'title': 'Top Hits', 'subtitle': 'Popular songs right now', 'icon': 'fas fa-fire', 'color': 'from-red-500 to-orange-500'},
-            {'id': '2', 'title': 'New Releases', 'subtitle': 'Fresh tracks this week', 'icon': 'fas fa-star', 'color': 'from-blue-500 to-indigo-500'},
-            {'id': '3', 'title': 'Chill Vibes', 'subtitle': 'Relax with these tunes', 'icon': 'fas fa-moon', 'color': 'from-green-500 to-teal-500'},
-            {'id': '4', 'title': 'Workout Mix', 'subtitle': 'Get pumped up', 'icon': 'fas fa-dumbbell', 'color': 'from-purple-500 to-pink-500'}
-        ]
-        if ytmusic:
+        featured = []
+        authenticated = is_authenticated()
+
+        if authenticated:
+            recommendations = ytmusic.get_home(limit=12) or []
+        else:
+            recommendations = ytmusic.search(query="pop", filter="songs", limit=12) or []
+            featured = [
+                {
+                    'id': '1', 'title': 'Explore Music', 'subtitle': 'Discover new tracks', 
+                    'icon': 'fas fa-compass', 'color': 'from-blue-500 to-indigo-600'
+                },
+                {
+                    'id': '2', 'title': 'Top Hits', 'subtitle': 'Today\'s biggest songs', 
+                    'icon': 'fas fa-star', 'color': 'from-yellow-500 to-orange-600'
+                },
+                {
+                    'id': '3', 'title': 'New Releases', 'subtitle': 'Fresh music drops', 
+                    'icon': 'fas fa-fire', 'color': 'from-red-500 to-pink-600'
+                },
+                {
+                    'id': '4', 'title': 'Your Library', 'subtitle': 'Your saved music', 
+                    'icon': 'fas fa-heart', 'color': 'from-purple-500 to-pink-600'
+                }
+            ]
+
+        formatted_recommendations = []
+        for item in recommendations:
             try:
-                recommendations = ytmusic.get_song_recommendations(limit=10)
-                recommendations = [{
-                    'id': item['videoId'],
-                    'title': item['title'],
-                    'artist': item['artists'][0]['name'] if item['artists'] else 'Unknown',
-                    'thumbnail': item['thumbnails'][0]['url'] if item['thumbnails'] else ''
-                } for item in recommendations]
-            except Exception as e:
-                print(f"Recommendations error: {e}")
+                artist = item.get('artists', [{}])[0].get('name', 'Unknown')
+                thumbnail = item.get('thumbnails', [{}])[0].get('url', '')
+                formatted_recommendations.append({
+                    'id': item.get('videoId', ''),
+                    'title': item.get('title', 'Unknown'),
+                    'artist': artist,
+                    'thumbnail': thumbnail
+                })
+            except (IndexError, KeyError, TypeError):
+                continue  # Skip invalid items
+
         return jsonify({
-            'recommendations': recommendations,
+            'recommendations': formatted_recommendations,
             'featured': featured,
-            'authenticated': bool(ytmusic)
+            'authenticated': authenticated
         })
     except Exception as e:
-        print(f"Home error: {e}")
-        return jsonify({'error': str(e)}), 500
+        print(f"Popular recommendations error: {e}")
+        return jsonify({
+            'recommendations': [],
+            'featured': featured,
+            'authenticated': authenticated
+        }), 200
 
 @app.route('/api/songs', methods=['GET'])
 def get_songs():
