@@ -16,6 +16,7 @@ from urllib.parse import quote
 import urllib.parse
 import base64
 import tempfile
+import signal
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
@@ -156,14 +157,17 @@ def get_personalized_recommendations():
             for content in shelf.get('contents', [])[:6]:  # First 6 items per shelf
                 if 'title' in content:
                     video_id = content.get('videoId')
-                    recommendations.append({
-                        'id': video_id or content.get('playlistId', str(len(recommendations))),
-                        'title': content['title'],
-                        'artist': content.get('subtitle', 'YouTube Music'),
-                        'thumbnail': content['thumbnails'][-1]['url'] if content.get('thumbnails') else "",
-                        'type': 'song' if 'videoId' in content else 'playlist',
-                        'url': f"https://www.youtube.com/watch?v={video_id}" if video_id else ""
-                    })
+                    if video_id:  # Only include items with video IDs
+                        views = get_accurate_views(video_id)
+                        recommendations.append({
+                            'id': video_id,
+                            'title': content['title'],
+                            'artist': content.get('subtitle', 'YouTube Music'),
+                            'thumbnail': content['thumbnails'][-1]['url'] if content.get('thumbnails') else "",
+                            'type': 'song',
+                            'url': f"https://www.youtube.com/watch?v={video_id}",
+                            'views': format_views(views)
+                        })
         
         # Clean up temp file
         os.unlink(browser_file)
@@ -188,14 +192,17 @@ def get_popular_recommendations():
                 for track in chart['items'][:12]:
                     try:
                         video_id = track.get('videoId')
-                        recommendations.append({
-                            'id': video_id,
-                            'title': track['title'],
-                            'artist': ", ".join([artist['name'] for artist in track.get('artists', [])]),
-                            'thumbnail': track['thumbnails'][-1]['url'] if track.get('thumbnails') else "",
-                            'type': 'song',
-                            'url': f"https://www.youtube.com/watch?v={video_id}" if video_id else ""
-                        })
+                        if video_id:
+                            views = get_accurate_views(video_id)
+                            recommendations.append({
+                                'id': video_id,
+                                'title': track['title'],
+                                'artist': ", ".join([artist['name'] for artist in track.get('artists', [])]),
+                                'thumbnail': track['thumbnails'][-1]['url'] if track.get('thumbnails') else "",
+                                'type': 'song',
+                                'url': f"https://www.youtube.com/watch?v={video_id}",
+                                'views': format_views(views)
+                            })
                     except:
                         continue
                 break
@@ -207,10 +214,10 @@ def get_popular_recommendations():
 
 def get_fallback_recommendations():
     return [
-        {'id': '1', 'title': 'Today\'s Top Hits', 'artist': 'Various Artists', 'thumbnail': '', 'type': 'playlist', 'url': ''},
-        {'id': '2', 'title': 'Pop Rising', 'artist': 'Popular Pop Music', 'thumbnail': '', 'type': 'playlist', 'url': ''},
-        {'id': '3', 'title': 'RapCaviar', 'artist': 'Hip Hop & Rap', 'thumbnail': '', 'type': 'playlist', 'url': ''},
-        {'id': '4', 'title': 'Mood Booster', 'artist': 'Feel Good Hits', 'thumbnail': '', 'type': 'playlist', 'url': ''}
+        {'id': '1', 'title': 'Today\'s Top Hits', 'artist': 'Various Artists', 'thumbnail': '', 'type': 'playlist', 'url': '', 'views': 'Popular'},
+        {'id': '2', 'title': 'Pop Rising', 'artist': 'Popular Pop Music', 'thumbnail': '', 'type': 'playlist', 'url': '', 'views': 'Trending'},
+        {'id': '3', 'title': 'RapCaviar', 'artist': 'Hip Hop & Rap', 'thumbnail': '', 'type': 'playlist', 'url': '', 'views': 'Popular'},
+        {'id': '4', 'title': 'Mood Booster', 'artist': 'Feel Good Hits', 'thumbnail': '', 'type': 'playlist', 'url': '', 'views': 'Popular'}
     ]
 
 def get_library_data():
@@ -240,15 +247,18 @@ def get_library_data():
             library_songs = ytmusic.get_library_songs(limit=100)
             for song in library_songs:
                 video_id = song.get('videoId')
-                library_data['songs'].append({
-                    'id': video_id,
-                    'title': song['title'],
-                    'artist': song['artists'][0]['name'] if song.get('artists') else 'Unknown',
-                    'album': song.get('album', {}).get('name', ''),
-                    'duration': song.get('duration', '0:00'),
-                    'thumbnail': song['thumbnails'][-1]['url'] if song.get('thumbnails') else "",
-                    'url': f"https://www.youtube.com/watch?v={video_id}" if video_id else ""
-                })
+                if video_id:
+                    views = get_accurate_views(video_id)
+                    library_data['songs'].append({
+                        'id': video_id,
+                        'title': song['title'],
+                        'artist': song['artists'][0]['name'] if song.get('artists') else 'Unknown',
+                        'album': song.get('album', {}).get('name', ''),
+                        'duration': song.get('duration', '0:00'),
+                        'thumbnail': song['thumbnails'][-1]['url'] if song.get('thumbnails') else "",
+                        'url': f"https://www.youtube.com/watch?v={video_id}",
+                        'views': format_views(views)
+                    })
         except Exception as e:
             print(f"Library songs error: {e}")
         
@@ -305,12 +315,8 @@ def fast_youtube_search(query, max_results=10):
 
     try:
         from ytmusicapi import YTMusic
-        print("✅ YTMusic imported successfully")
-        
         yt = YTMusic()
-        print("✅ YTMusic instance created")
         
-        # Search with error handling for each type
         songs = []
         artists = []
         albums = []
@@ -404,6 +410,7 @@ def fast_youtube_search(query, max_results=10):
 
 def get_accurate_views(video_id):
     """Get actual view count from YouTube"""
+    print(f"🔍 Getting views for: {video_id}")
     if not video_id:
         return 0
         
@@ -423,17 +430,22 @@ def get_accurate_views(video_id):
                     view_count = value
                     break
         
+        print(f"📊 Raw view count: {view_count}")
+        
         if view_count:
             # Convert to integer, handling string formats
             if isinstance(view_count, str):
                 # Remove commas and non-numeric characters
                 view_count = re.sub(r'[^\d]', '', view_count)
-            return int(view_count) if view_count else 0
+            result = int(view_count) if view_count else 0
+            print(f"🎯 Processed view count: {result}")
+            return result
         else:
+            print("❌ No view count found")
             return 0
             
     except Exception as e:
-        print(f"⚠️ View count error for {video_id}: {e}")
+        print(f"❌ View count error for {video_id}: {e}")
         return 0
 
 def get_artist_songs(artist_id):
@@ -728,7 +740,7 @@ def download():
         
         output_template = os.path.join('downloads', f'{filename}.%(ext)s')
         
-        # Download with metadata
+        # Download with metadata - REMOVED COOKIES
         cmd = [
             sys.executable, '-m', 'yt_dlp',
             '-x', '--audio-format', 'mp3',
@@ -739,24 +751,12 @@ def download():
             '--parse-metadata', 'uploader:%(artist)s',
             '-o', output_template,
             '--no-warnings',
-            '--quiet'
+            '--quiet',
+            url
         ]
-        
-        # Add cookies if available
-        if browser_json_content and user_authenticated:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                f.write(browser_json_content)
-                cookie_file = f.name
-            cmd.extend(['--cookies', cookie_file])
-
-        cmd.append(url)
 
         print(f"📥 Running download command...")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        
-        # Clean up temp cookie file
-        if 'cookie_file' in locals():
-            os.unlink(cookie_file)
         
         if result.returncode == 0:
             print(f"✅ Download completed for: {title}")
