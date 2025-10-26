@@ -76,7 +76,7 @@ def sanitize_filename(filename):
     return re.sub(r'[<>:"/\\|?*]', '', filename)
 
 def get_youtube_suggestions(query):
-    """Get YouTube search suggestions - WORKING VERSION"""
+    """Get YouTube search suggestions - IMPROVED VERSION"""
     if not query or len(query) < 2:
         return []
 
@@ -84,17 +84,38 @@ def get_youtube_suggestions(query):
         url = "https://suggestqueries.google.com/complete/search"
         params = {
             "client": "youtube",
-            "hl": "en",
+            "hl": "en", 
             "ds": "yt",
             "q": query
         }
         
-        response = requests.get(url, params=params, timeout=2)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = requests.get(url, params=params, headers=headers, timeout=3)
         if response.status_code == 200:
-            # Parse the JSONP response
-            data = json.loads(response.text[response.text.find('['):response.text.rfind(']')+1])
-            if len(data) > 1:
-                return data[1][:8]  # Return first 8 suggestions
+            # Better JSON parsing for the suggestions
+            try:
+                # The response is in JSONP format, extract the JSON part
+                content = response.text
+                start = content.find('[')
+                end = content.rfind(']') + 1
+                
+                if start != -1 and end != -1:
+                    json_str = content[start:end]
+                    data = json.loads(json_str)
+                    
+                    if len(data) > 1 and isinstance(data[1], list):
+                        suggestions = data[1][:8]  # Get first 8 suggestions
+                        print(f"✅ Got {len(suggestions)} suggestions for: {query}")
+                        return suggestions
+            except json.JSONDecodeError as e:
+                print(f"JSON parse error for suggestions: {e}")
+                return []
+                
+    except requests.exceptions.Timeout:
+        print("⚠️ Suggestions request timed out")
     except Exception as e:
         print(f"Suggestions error: {e}")
     
@@ -715,3 +736,4 @@ def download_file(song_id):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
