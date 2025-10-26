@@ -476,7 +476,15 @@ def add_metadata_to_file(filepath, title, artist, album, thumbnail_url=None):
         from mutagen import File
         from mutagen.id3 import ID3, TIT2, TPE1, TALB, APIC
         
-        audio = ID3(filepath)
+        # Ensure file exists
+        if not os.path.exists(filepath):
+            print(f"⚠️ File not found for metadata: {filepath}")
+            return
+        
+        try:
+            audio = ID3(filepath)
+        except:
+            audio = ID3()
         
         # Add basic metadata
         audio["TIT2"] = TIT2(encoding=3, text=title)
@@ -484,8 +492,8 @@ def add_metadata_to_file(filepath, title, artist, album, thumbnail_url=None):
         if album:
             audio["TALB"] = TALB(encoding=3, text=album)
         
-        # Add album art if available
-        if thumbnail_url:
+        # Add album art if available (fallback if yt-dlp embedding failed)
+        if thumbnail_url and not any(key.startswith('APIC') for key in audio.keys()):
             try:
                 response = requests.get(thumbnail_url, timeout=10)
                 if response.status_code == 200:
@@ -496,10 +504,11 @@ def add_metadata_to_file(filepath, title, artist, album, thumbnail_url=None):
                         desc='Cover',
                         data=response.content
                     )
-            except:
-                pass
+                    print(f"✅ Added thumbnail from URL to: {filepath}")
+            except Exception as e:
+                print(f"⚠️ Could not add thumbnail from URL: {e}")
         
-        audio.save()
+        audio.save(filepath)
         print(f"✅ Metadata added to: {filepath}")
         
     except Exception as e:
@@ -727,14 +736,18 @@ def download():
     if not video_id:
         return jsonify({'error': 'No videoId provided'}), 400
 
+    # Clean up the filename - only artist and title, no video ID
     sanitized_title = "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip()
     sanitized_artist = "".join(c for c in artist if c.isalnum() or c in (" ", "-", "_")).strip()
-    filename = f"{sanitized_artist} - {sanitized_title}_{video_id}.mp3"
+    
+    # SIMPLE filename: "Artist - Title.mp3"
+    filename = f"{sanitized_artist} - {sanitized_title}.mp3"
     file_path = os.path.join(DOWNLOAD_DIR, filename)
 
     # Check if file exists (cache hit)
     if os.path.exists(file_path):
         print(f"✅ Cache hit for {filename}")
+        # Ensure metadata is added even for cached files
         add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
         songs_db.append({
             'id': video_id,
@@ -753,32 +766,37 @@ def download():
             'filename': filename
         })
 
-    # Download with yt-dlp - FIXED FORMAT OPTIONS
+    # OPTIMIZED download with yt-dlp
     ydl_opts = {
-        'format': 'bestaudio[ext=m4a]/bestaudio/best',
-        'outtmpl': file_path.replace('.mp3', '.%(ext)s'),  # Let yt-dlp handle extension
+        'format': 'bestaudio/best',
+        'outtmpl': file_path.replace('.mp3', '.%(ext)s'),
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
-        'cookiefile': os.path.join(BASE_DIR, 'cookies.txt'),
+        'writethumbnail': True,  # IMPORTANT: Download thumbnail
+        'embedthumbnail': True,  # IMPORTANT: Embed thumbnail in MP3
         'noplaylist': True,
-        'quiet': False,
-        'no_warnings': False,
+        'quiet': True,
+        'no_warnings': True,
+        'no_check_certificate': True,
+        'prefer_ffmpeg': True,
+        'keepvideo': False,
+        'retries': 3,
+        'fragment_retries': 3,
+        'skip_unavailable_fragments': True,
     }
 
     try:
+        print(f"🚀 Starting download for: {title}")
+        start_time = time.time()
+        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
         
-        # The file will be downloaded with .mp3 extension due to postprocessor
-        mp3_file_path = file_path.replace('.mp3', '.mp3')  # Already correct
-        
-        print(f"✅ Downloaded {filename}")
-
-        # Add metadata and thumbnail
-        add_metadata_to_file(mp3_file_path, title, artist, album, thumbnail_url)
+        download_time = time.time() - start_time
+        print(f"✅ Downloaded {filename} in {download_time:.1f} seconds")
 
         # Update user data
         songs_db.append({
@@ -810,7 +828,7 @@ def get_songs():
 def get_artists():
     return jsonify({'artists': artists_db})
 
-@app.route('/api/play-song/<int:song_id>')
+@app.route('/api/play-song/<song_id>')
 def play_song(song_id):
     """Serve song file for playback"""
     song = next((s for s in songs_db if s['id'] == song_id), None)
@@ -823,7 +841,7 @@ def play_song(song_id):
         
     return send_file(filepath)
 
-@app.route('/api/download-file/<int:song_id>')
+@app.route('/api/download-file/<song_id>')
 def download_file(song_id):
     """Download song to computer"""
     song = next((s for s in songs_db if s['id'] == song_id), None)
@@ -860,3 +878,4 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
