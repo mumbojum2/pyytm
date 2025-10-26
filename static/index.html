@@ -23,6 +23,8 @@
         .progress-fill { height: 100%; background: #10b981; transition: width 0.1s ease; }
         .skeleton-loader { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; }
         @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .play-button-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.3); border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease; }
+        .play-button-overlay:hover { opacity: 1; }
     </style>
 </head>
 <body class="gradient-bg min-h-screen">
@@ -76,13 +78,13 @@
                 checkAuthentication();
             }, []);
 
-            // Search handling - FIXED VERSION
+            // Fixed search handling - faster and more reliable
             useEffect(() => {
                 if (searchQuery.length >= 2) {
                     if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
                     suggestionTimer.current = setTimeout(() => {
                         fetchSuggestions();
-                    }, 300);
+                    }, 200); // Reduced from 300ms to 200ms for faster response
                 } else {
                     setShowSuggestions(false);
                     setSuggestions([]);
@@ -152,20 +154,43 @@
                 }
             };
 
+            // FIXED: Faster suggestions with better error handling
             const fetchSuggestions = async () => {
+                if (!searchQuery.trim() || searchQuery.length < 2) {
+                    setSuggestions([]);
+                    setShowSuggestions(false);
+                    return;
+                }
+
                 try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5 second timeout
+
                     const response = await fetch(`${API_BASE}/api/suggestions`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ query: searchQuery })
+                        body: JSON.stringify({ query: searchQuery }),
+                        signal: controller.signal
                     });
+
+                    clearTimeout(timeoutId);
+
                     if (response.ok) {
                         const data = await response.json();
-                        setSuggestions(data.suggestions || []);
-                        setShowSuggestions(data.suggestions && data.suggestions.length > 0);
+                        // Filter out any suggestions with strange numbers at the end
+                        const cleanSuggestions = (data.suggestions || [])
+                            .filter(suggestion => suggestion && typeof suggestion === 'string')
+                            .map(suggestion => suggestion.replace(/\d{8,}$/, '').trim()) // Remove trailing long numbers
+                            .filter(suggestion => suggestion.length > 0)
+                            .slice(0, 5);
+                        
+                        setSuggestions(cleanSuggestions);
+                        setShowSuggestions(cleanSuggestions.length > 0);
                     }
                 } catch (error) {
-                    console.error('Suggestions error:', error);
+                    if (error.name !== 'AbortError') {
+                        console.error('Suggestions error:', error);
+                    }
                     setSuggestions([]);
                     setShowSuggestions(false);
                 }
@@ -200,46 +225,12 @@
                     console.log('✅ Search results:', data);
                     setSearchResults(data);
                     
-                    // Fetch view counts for all songs
-                    if (data.songs && data.songs.length > 0) {
-                        fetchViewCounts(data.songs);
-                    }
-                    
                 } catch (error) {
                     console.error('Search error:', error);
                     showMessage('Search failed. Please try again.', 'error');
                     setSearchResults({songs: [], artists: [], albums: []});
                 } finally {
                     setLoading(false);
-                }
-            };
-
-            const fetchViewCounts = async (songs) => {
-                try {
-                    const viewCountPromises = songs.map(async (song) => {
-                        try {
-                            const response = await fetch(`${API_BASE}/api/views/${song.id}`);
-                            if (response.ok) {
-                                const data = await response.json();
-                                return { id: song.id, views: data.views };
-                            }
-                        } catch (error) {
-                            console.error(`Error fetching views for ${song.id}:`, error);
-                        }
-                        return { id: song.id, views: null };
-                    });
-
-                    const viewResults = await Promise.all(viewCountPromises);
-                    const newViewCounts = {};
-                    viewResults.forEach(result => {
-                        if (result.views) {
-                            newViewCounts[result.id] = result.views;
-                        }
-                    });
-                    
-                    setViewCounts(prev => ({ ...prev, ...newViewCounts }));
-                } catch (error) {
-                    console.error('Error fetching view counts:', error);
                 }
             };
 
@@ -261,9 +252,11 @@
                 }
             };
 
+            // FIXED: Better play function with proper error handling
             const handlePlaySong = async (song) => {
                 try {
                     console.log('🎵 Attempting to play:', song.title);
+                    showMessage(`🔄 Loading: ${song.title}`, 'info');
                     
                     // Try to get direct audio stream
                     const response = await fetch(`${API_BASE}/api/stream/${song.id}`);
@@ -282,16 +275,21 @@
                         if (audioRef.current) {
                             audioRef.current.src = proxyUrl;
                             audioRef.current.load();
-                            // Don't auto-play, let user click play button
+                            // Wait a moment then try to play
+                            setTimeout(() => {
+                                audioRef.current.play().catch(e => {
+                                    console.log('Auto-play prevented, user can click play button');
+                                });
+                            }, 100);
                         }
                         
-                        showMessage(`🎵 Ready to play: ${song.title}`, 'success');
+                        showMessage(`🎵 Now playing: ${song.title}`, 'success');
                     } else {
                         throw new Error(data.error || 'Could not get audio stream');
                     }
                 } catch (error) {
                     console.error('Play error:', error);
-                    showMessage('Failed to get audio stream. Try downloading instead.', 'error');
+                    showMessage('Failed to play song. Try downloading instead.', 'error');
                 }
             };
 
@@ -306,7 +304,8 @@
                         thumbnail: song.thumbnail || '',
                         format: 'mp3'
                     };
-                    console.log('Download payload:', payload);
+
+                    showMessage(`⬇️ Starting download: ${song.title}`, 'info');
 
                     const response = await fetch(`${API_BASE}/api/download`, {
                         method: 'POST',
@@ -376,7 +375,11 @@
                     if (audioRef.current) {
                         audioRef.current.src = audioUrl;
                         audioRef.current.load();
+                        audioRef.current.play().catch(e => {
+                            console.log('Auto-play prevented');
+                        });
                     }
+                    showMessage(`🎵 Playing: ${song.title}`, 'success');
                 } catch (error) {
                     showMessage('Failed to play song', 'error');
                 }
@@ -420,79 +423,6 @@
                 }
             };
 
-            const handleExportData = async () => {
-                try {
-                    const response = await fetch(`${API_BASE}/api/export-data`);
-                    if (response.ok) {
-                        const blob = await response.blob();
-                        const url = window.URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.style.display = 'none';
-                        a.href = url;
-                        a.download = `musicgrab_backup_${new Date().toISOString().split('T')[0]}.json`;
-                        document.body.appendChild(a);
-                        a.click();
-                        window.URL.revokeObjectURL(url);
-                        document.body.removeChild(a);
-                        showMessage('✅ Data exported successfully!', 'success');
-                    }
-                } catch (error) {
-                    showMessage('Failed to export data', 'error');
-                }
-            };
-
-            const handleImportData = async (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                try {
-                    const formData = new FormData();
-                    formData.append('file', file);
-
-                    const response = await fetch(`${API_BASE}/api/import-data`, {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    const data = await response.json();
-                    if (response.ok && data.success) {
-                        showMessage('✅ Data imported successfully!', 'success');
-                        await loadSongs();
-                        await loadArtists();
-                        await loadSearchHistory();
-                    } else {
-                        throw new Error(data.error || 'Import failed');
-                    }
-                } catch (error) {
-                    showMessage(`❌ ${error.message}`, 'error');
-                }
-                
-                event.target.value = '';
-            };
-
-            const handleThumbnailLoad = (id) => {
-                setLoadedThumbnails(prev => new Set([...prev, id]));
-            };
-
-            const highlightSuggestion = (suggestion, query) => {
-                const index = suggestion.toLowerCase().indexOf(query.toLowerCase());
-                if (index === -1) return suggestion;
-                const before = suggestion.substring(0, index);
-                const match = suggestion.substring(index, index + query.length);
-                const after = suggestion.substring(index + query.length);
-                return (
-                    <span>
-                        {before}
-                        <span className="bg-purple-100 font-semibold">{match}</span>
-                        {after}
-                    </span>
-                );
-            };
-
-            const getArtistSongs = (artistName) => {
-                return songs.filter(song => song.artist === artistName);
-            };
-
             const formatViews = (views) => {
                 if (!views || views === 0) return "No views";
                 
@@ -512,11 +442,6 @@
                 } catch {
                     return "No views";
                 }
-            };
-
-            const getSongViews = (song) => {
-                // Use enhanced view count if available, otherwise fall back to original
-                return viewCounts[song.id] || song.views || 'No views';
             };
 
             const tabs = [
@@ -562,12 +487,7 @@
                                     <img 
                                         src={nowPlaying.thumbnail} 
                                         alt={nowPlaying.title}
-                                        loading="lazy"
-                                        decoding="async"
                                         className="w-12 h-12 rounded-lg object-cover"
-                                        onError={(e) => {
-                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
-                                        }}
                                     />
                                     <div className="flex-1 min-w-0">
                                         <h4 className="font-semibold text-sm truncate">{nowPlaying.title}</h4>
@@ -636,15 +556,8 @@
                                                 <input 
                                                     type="text"
                                                     value={searchQuery}
-                                                    onChange={(e) => {
-                                                        const value = e.target.value;
-                                                        setSearchQuery(value);
-                                                    }}
-                                                    onKeyPress={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            handleSearch();
-                                                        }
-                                                    }}
+                                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                                    onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                                                     onFocus={() => setSearchFocused(true)}
                                                     onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
                                                     placeholder="Search for songs, artists, or albums..."
@@ -656,7 +569,6 @@
                                                             setSearchQuery('');
                                                             setSearchResults({songs: [], artists: [], albums: []});
                                                             setShowSuggestions(false);
-                                                            setActiveTab('home');
                                                         }}
                                                         className="ml-3 text-white/70 hover:text-white"
                                                     >
@@ -666,9 +578,9 @@
                                             </div>
                                         </div>
 
-                                        {/* Search Suggestions */}
-                                        {showSuggestions && suggestions.length > 0 && (
-                                            <div className="absolute w-full bg-white/95 rounded-2xl shadow-2xl mt-2 py-2 z-10 border border-white/20 backdrop-blur-sm fade-in">
+                                        {/* Search Suggestions - FIXED */}
+                                        {showSuggestions && (
+                                            <div className="absolute w-full bg-white/95 rounded-2xl shadow-2xl mt-2 py-2 z-10 border border-white/20 backdrop-blur-sm fade-in max-h-60 overflow-y-auto">
                                                 {suggestions.map((suggestion, idx) => (
                                                     <button
                                                         key={idx}
@@ -679,7 +591,7 @@
                                                         className="w-full px-6 py-3 text-left hover:bg-purple-50 flex items-center gap-3 transition-colors"
                                                     >
                                                         <i className="fas fa-search text-purple-500"></i>
-                                                        <span className="text-gray-700">{suggestion}</span>
+                                                        <span className="text-gray-700 truncate">{suggestion}</span>
                                                     </button>
                                                 ))}
                                             </div>
@@ -694,9 +606,6 @@
                                             Connected
                                         </div>
                                     )}
-                                    <button className="text-white/80 hover:text-white transition-colors">
-                                        <i className="fas fa-bell text-xl"></i>
-                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -733,7 +642,6 @@
                         {/* Home Page */}
                         {activeTab === 'home' && (
                             <div className="fade-in">
-                                {/* Welcome Section */}
                                 <div className="text-center mb-12">
                                     <h1 className="text-4xl font-bold text-white mb-4">
                                         {userAuthenticated ? 'Welcome Back!' : 'Welcome to MusicGrab Pro'}
@@ -771,14 +679,9 @@
                                                     <img 
                                                         src={rec.thumbnail} 
                                                         alt={rec.title}
-                                                        loading="lazy"
-                                                        decoding="async"
                                                         className="w-full aspect-square object-cover rounded-xl"
-                                                        onError={(e) => {
-                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMTAwIDEzNEwxMjAgMTE0TDEwMCA5NEw4MCAxMTBMMTAwIDEzNFoiIGZpbGw9IiM4RThFOEUiLz48cGF0aCBkPSJNODAgMTQ0TDEyMCAxNDBMMTIwIDg0TDgwIDg0TDgwIDE0NFoiIGZpbGw9IiM4RThFOEUiLz48L3N2Zz4=';
-                                                        }}
                                                     />
-                                                    <div className="absolute inset-0 bg-black/20 rounded-xl flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                                    <div className="play-button-overlay">
                                                         <i className="fas fa-play text-white text-2xl"></i>
                                                     </div>
                                                 </div>
@@ -791,7 +694,7 @@
                             </div>
                         )}
 
-                        {/* Search Results - FIXED */}
+                        {/* Search Results - FIXED LAYOUT */}
                         {activeTab === 'search' && (
                             <div className="fade-in">
                                 {loading ? (
@@ -802,7 +705,6 @@
                                     </div>
                                 ) : (
                                     <div>
-                                        {/* Show search term */}
                                         <div className="mb-6">
                                             <h1 className="text-2xl font-bold text-white">
                                                 Search Results for: "{searchQuery}"
@@ -820,9 +722,6 @@
                                                                 src={artist.thumbnail} 
                                                                 alt={artist.name}
                                                                 className="w-20 h-20 rounded-full mx-auto mb-3 object-cover"
-                                                                onError={(e) => {
-                                                                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSI4MCIgY3k9IjQwIiByPSI0MCIgZmlsbD0iI0VFNUU1RSIvPjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE1IiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTI1IDY1QzI1IDU3IDMyIDUwIDQwIDUwQzQ4IDUwIDU1IDU3IDU1IDY1SDI1WiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
-                                                                }}
                                                             />
                                                             <h3 className="font-semibold text-white text-sm">{artist.name}</h3>
                                                             <p className="text-white/70 text-xs">Artist</p>
@@ -843,9 +742,6 @@
                                                                 src={album.thumbnail} 
                                                                 alt={album.title}
                                                                 className="w-full aspect-square object-cover rounded-xl mb-3"
-                                                                onError={(e) => {
-                                                                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMTAwIDEzNEwxMjAgMTE0TDEwMCA5NEw4MCAxMTBMMTAwIDEzNFoiIGZpbGw9IiM4RThFOEUiLz48cGF0aCBkPSJNODAgMTQ0TDEyMCAxNDBMMTIwIDg0TDgwIDg0TDgwIDE0NFoiIGZpbGw9IiM4RThFOEUiLz48L3N2Zz4=';
-                                                                }}
                                                             />
                                                             <h3 className="font-semibold text-white text-sm mb-1 truncate">{album.title}</h3>
                                                             <p className="text-white/70 text-xs truncate">{album.artist}</p>
@@ -856,7 +752,7 @@
                                             </div>
                                         )}
 
-                                        {/* Songs */}
+                                        {/* Songs - FIXED LAYOUT */}
                                         {searchResults.songs && searchResults.songs.length > 0 && (
                                             <div>
                                                 <h2 className="text-2xl font-bold text-white mb-4">Songs</h2>
@@ -864,20 +760,19 @@
                                                     {searchResults.songs.map((song, index) => (
                                                         <div key={`${song.id}-${index}`} className="bg-white/10 rounded-xl p-4 hover:bg-white/20 transition-all backdrop-blur-sm">
                                                             <div className="flex items-center gap-4">
+                                                                {/* FIXED: Properly aligned thumbnail with play button */}
                                                                 <div className="relative flex-shrink-0">
                                                                     <img 
                                                                         src={song.thumbnail} 
                                                                         alt={song.title}
                                                                         className="w-12 h-12 rounded-lg object-cover"
-                                                                        onError={(e) => {
-                                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
-                                                                        }}
                                                                     />
                                                                     <button
                                                                         onClick={() => handlePlaySong(song)}
-                                                                        className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                                                                        className="play-button-overlay"
+                                                                        title="Play song"
                                                                     >
-                                                                        <i className="fas fa-play text-white text-lg"></i>
+                                                                        <i className="fas fa-play text-white text-sm"></i>
                                                                     </button>
                                                                 </div>
                                                                 
@@ -901,26 +796,29 @@
                                                                     <div className="flex items-center gap-3 text-xs text-white/60 flex-wrap">
                                                                         <span>Duration: {song.duration}</span>
                                                                         <span>•</span>
-                                                                        <span>{formatViews(getSongViews(song))}</span>
+                                                                        <span>{song.views || 'No views'}</span>
                                                                     </div>
                                                                 </div>
                                                                 
-                                                                <div className="flex items-center gap-2">
+                                                                {/* FIXED: Properly aligned action buttons */}
+                                                                <div className="flex items-center gap-2 flex-shrink-0">
                                                                     <button
                                                                         onClick={() => handlePlaySong(song)}
-                                                                        className="bg-white/20 text-white p-2 rounded-lg hover:bg-white/30 transition-all"
+                                                                        className="bg-white/20 text-white p-2 rounded-lg hover:bg-white/30 transition-all flex items-center justify-center"
                                                                         title="Play"
+                                                                        style={{ width: '40px', height: '40px' }}
                                                                     >
-                                                                        <i className="fas fa-play"></i>
+                                                                        <i className="fas fa-play text-sm"></i>
                                                                     </button>
                                                                     <button
                                                                         onClick={() => handleDownload(song)}
                                                                         disabled={downloading === song.id}
-                                                                        className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 flex-shrink-0 ${
+                                                                        className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
                                                                             downloading === song.id 
                                                                                 ? 'bg-green-500/20 text-green-300 cursor-not-allowed' 
                                                                                 : 'bg-white/20 text-white hover:bg-white/30'
                                                                         }`}
+                                                                        style={{ height: '40px' }}
                                                                     >
                                                                         {downloading === song.id ? (
                                                                             <>
@@ -975,12 +873,7 @@
                                                     <img 
                                                         src={song.thumbnail} 
                                                         alt={song.title}
-                                                        loading="lazy"
-                                                        decoding="async"
                                                         className="w-12 h-12 rounded-lg object-cover"
-                                                        onError={(e) => {
-                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
-                                                        }}
                                                     />
                                                     <div className="flex-1">
                                                         <h3 className="font-semibold text-white text-lg">{song.title}</h3>
@@ -1051,30 +944,6 @@
                                             </button>
                                         </div>
                                     )}
-                                </div>
-
-                                <div className="bg-white/10 rounded-2xl p-6 backdrop-blur-sm">
-                                    <h3 className="text-xl font-semibold text-white mb-4">Data Management</h3>
-                                    <div className="flex items-center gap-4 mb-4">
-                                        <button
-                                            onClick={handleExportData}
-                                            className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all"
-                                        >
-                                            <i className="fas fa-download mr-2"></i>
-                                            Export Data
-                                        </button>
-                                        <label className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all cursor-pointer">
-                                            <i className="fas fa-upload mr-2"></i>
-                                            Import Data
-                                            <input
-                                                type="file"
-                                                accept=".json"
-                                                onChange={handleImportData}
-                                                className="hidden"
-                                            />
-                                        </label>
-                                    </div>
-                                    <p className="text-white/70 text-sm">Export or import your downloaded songs and artists data</p>
                                 </div>
                             </div>
                         )}
