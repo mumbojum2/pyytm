@@ -545,7 +545,6 @@ def get_search_history():
 
 @app.route('/api/authenticate', methods=['POST'])
 def authenticate():
-    """Authenticate with browser.json"""
     global browser_json_content, user_authenticated
     
     try:
@@ -555,7 +554,7 @@ def authenticate():
         
         browser_json_content = data['browserJson']
         
-        # Test authentication
+        # Test authentication with a simpler method
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
             f.write(browser_json_content)
             browser_file = f.name
@@ -563,16 +562,29 @@ def authenticate():
         from ytmusicapi import YTMusic
         ytmusic = YTMusic(browser_file)
         
-        # Try to get home feed to verify authentication
-        ytmusic.get_home()
+        # Use a more reliable test - get account info
+        try:
+            account_info = ytmusic.get_account_info()
+            user_authenticated = True
+            return jsonify({
+                'success': True, 
+                'message': 'Authentication successful!',
+                'account': account_info.get('name', 'Unknown')
+            })
+        except Exception as auth_error:
+            # Fallback: try to get home feed
+            try:
+                ytmusic.get_home(limit=1)
+                user_authenticated = True
+                return jsonify({'success': True, 'message': 'Authentication successful!'})
+            except:
+                raise auth_error
         
         os.unlink(browser_file)
-        user_authenticated = True
-        
-        return jsonify({'success': True, 'message': 'Authentication successful!'})
         
     except Exception as e:
         user_authenticated = False
+        print(f"Authentication error: {e}")  # Add debugging
         return jsonify({'error': f'Authentication failed: {str(e)}'}), 400
 
 @app.route('/api/export-data')
@@ -778,4 +790,5 @@ def format_views(views):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000, debug=False)
+
 
