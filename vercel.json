@@ -1,12 +1,13 @@
 {
-"functions": {
-"main.py": {
-"runtime": "@vercel/python"
-}
-},
-"routes": [
-{ "src": "/api/(.)", "dest": "main.py" },
-{ "src": "/static/(.)", "dest": "/static/$1" },
-{ "src": "/(.*)", "dest": "/static/index.html" }
-]
+  "version": 2,
+  "functions": {
+    "main.py": {
+      "runtime": "@vercel/python@3.12"
+    }
+  },
+  "routes": [
+    { "src": "/api/(.*)", "dest": "main.py" },
+    { "src": "/static/(.*)", "dest": "/static/$1" },
+    { "src": "/(.*)", "dest": "/static/index.html" }
+  ]
 }
