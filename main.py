@@ -741,71 +741,50 @@ def serve_download(filename):
 @app.route('/api/download', methods=['POST'])
 def download():
     data = request.get_json()
-    print(f"🔍 Download request payload: {data}")  # Debug logging
-    if not data:
-        return jsonify({'error': 'No JSON data provided'}), 400
-    
     video_id = data.get('videoId')
-    title = data.get('title', 'Unknown Title')
-    artist = data.get('artist', 'Unknown Artist')
-    album = data.get('album', '')
-    thumbnail_url = data.get('thumbnail', '')
-    
+    title = data.get('title', 'Unknown')
+    artist = data.get('artist', 'Unknown')
+    format = data.get('format', 'mp3')
+    no_metadata = data.get('no_metadata', False)
+
     if not video_id:
         return jsonify({'error': 'No videoId provided'}), 400
-    
-    # Generate unique filename
-    filename = f"{sanitize_filename(artist)} - {sanitize_filename(title)}_{video_id}.m4a"
-    output_path = os.path.join('/home/akiva/pyytm/downloads', filename)
-    cookie_path = "/home/akiva/pyytm/cookies.txt"
-    cmd = [
-        "yt-dlp",
-        "--format", "bestaudio[ext=m4a]/bestaudio[ext=mp3]/140",
-        "--output", output_path,
-        "--cookies", cookie_path if os.path.exists(cookie_path) else "",
-        f"https://www.youtube.com/watch?v={video_id}"
-    ]
-    
-    try:
-        print(f"🔄 Starting download: {video_id}")
-        print(f"🔑 Using cookies for auth" if os.path.exists(cookie_path) else "🔑 No cookies used")
-        print(f"📥 Running download command (attempt 1)...")
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        
-        # Add metadata
-        add_metadata_to_file(output_path, title, artist, album, thumbnail_url)
-        
-        # Update songs_db
-        songs_db.append({
-            'id': video_id,
-            'title': title,
-            'artist': artist,
-            'album': album,
-            'filename': filename,
-            'url': f"https://www.youtube.com/watch?v={video_id}",
-            'thumbnail': thumbnail_url,
-            'views': 'Downloaded'
-        })
-        save_user_data()
-        
-        print(f"✅ Download successful: {output_path}")
-        
-        # Schedule cleanup
-        threading.Thread(target=cleanup_file, args=(output_path, 300), daemon=True).start()
-        
-        # Return download URL for frontend
-        download_url = f"/downloads/{filename}"
+
+    sanitized_title = "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip()
+    sanitized_artist = "".join(c for c in artist if c.isalnum() or c in (" ", "-", "_")).strip()
+    filename = f"{sanitized_artist} - {sanitized_title}_{video_id}.mp3"
+    file_path = os.path.join(DOWNLOAD_DIR, filename)
+
+    # Check if file exists (cache hit)
+    if os.path.exists(file_path):
         return jsonify({
             'status': 'success',
-            'downloadUrl': download_url,
+            'downloadUrl': f"/downloads/{filename}",
             'filename': filename
         })
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Download failed: {e.stderr}")
-        if os.path.exists(output_path):
-            os.remove(output_path)
-        return jsonify({'error': f'Download failed: {e.stderr}'}), 500
 
+    # Download with yt-dlp
+    ydl_opts = {
+        'format': 'bestaudio[ext=mp3]',
+        'outtmpl': file_path,
+        'cookiefile': 'cookies.txt',
+        'noplaylist': True
+    }
+    if no_metadata:
+        ydl_opts['postprocessors'] = [{'key': 'FFmpegMetadata', 'add_metadata': False}]
+        ydl_opts['writethumbnail'] = False
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+        return jsonify({
+            'status': 'success',
+            'downloadUrl': f"/downloads/{filename}",
+            'filename': filename
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+        
 @app.route('/api/songs')
 def get_songs():
     return jsonify({'songs': songs_db})
@@ -864,3 +843,4 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
