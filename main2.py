@@ -139,6 +139,25 @@ def parse_view_count(view_str):
         print(f"View count parsing error for '{view_str}': {e}")
         return 0
 
+def format_views(views):
+    """Format view count into human readable format"""
+    if not views or views == 0:
+        return "No views"
+    
+    try:
+        views = int(views)
+    except:
+        return "No views"
+        
+    if views >= 1000000000:
+        return f"{views / 1000000000:.1f}B views"
+    elif views >= 1000000:
+        return f"{views / 1000000:.1f}M views"
+    elif views >= 1000:
+        return f"{views / 1000:.1f}K views"
+    else:
+        return f"{views:,} views"
+
 def get_personalized_recommendations():
     """Get personalized recommendations using browser.json"""
     global browser_json_content, user_authenticated
@@ -265,7 +284,7 @@ def fast_youtube_search(query, max_results=10):
                         'artist': artists_str,
                         'album': song.get('album', {}).get('name', '') if song.get('album') else '',
                         'thumbnail': thumbnail_url,
-                        'views': format_views(views),
+                        'views': format_views(views),  # FIXED: Now using the function
                         'is_explicit': any(word in song.get('title', '').lower() for word in ['explicit', 'clean']),
                         'raw_views': views
                     })
@@ -524,6 +543,36 @@ def proxy_audio():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# NEW: Enhanced view count endpoint
+@app.route('/api/views/<video_id>')
+def get_views(video_id):
+    """Get accurate view count for a video using the enhanced method"""
+    try:
+        from ytmusicapi import YTMusic
+        yt = YTMusic()
+        
+        # Search for the specific video to get accurate view count
+        results = yt.search(video_id, filter='videos', limit=1)
+        
+        if not results:
+            return jsonify({'views': 0, 'error': 'Video not found'})
+        
+        # Get the first result (should be our video)
+        item = results[0]
+        views = item.get('views', '0')
+        
+        parsed_views = parse_view_count(views)
+        
+        return jsonify({
+            'views': parsed_views,
+            'formatted': format_views(parsed_views),
+            'raw': views
+        })
+        
+    except Exception as e:
+        print(f"View count error for {video_id}: {e}")
+        return jsonify({'views': 0, 'error': str(e)})
+
 # FIXED: Add the missing play-song route
 @app.route('/api/play-song/<song_id>')
 def play_song(song_id):
@@ -648,64 +697,21 @@ def serve_download(filename):
     
     return send_file(filepath, as_attachment=True, download_name=filename)
 
-# Add this to your main2.py file
-
-@app.route('/api/views/<video_id>')
-def get_views(video_id):
-    """Get accurate view count for a video using the enhanced method"""
-    try:
-        from ytmusicapi import YTMusic
-        yt = YTMusic()
+@app.route('/api/download-file/<song_id>')
+def download_file(song_id):
+    """Download song to computer"""
+    song = next((s for s in songs_db if s['id'] == song_id), None)
+    if not song:
+        return jsonify({'error': 'Song not found'}), 404
         
-        # Search for the specific video to get accurate view count
-        results = yt.search(video_id, filter='videos', limit=1)
+    filepath = os.path.join('/home/akiva/pyytm/downloads', song['filename'])
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
         
-        if not results:
-            return jsonify({'views': 0, 'error': 'Video not found'})
-        
-        # Get the first result (should be our video)
-        item = results[0]
-        views = item.get('views', '0')
-        
-        # Parse the view count
-        def parse_views(view_str):
-            if not view_str:
-                return 0
-            try:
-                view_str = str(view_str).strip().upper().replace(',', '').replace(' ', '')
-                if not view_str or 'NO' in view_str:
-                    return 0
-                if view_str.isdigit():
-                    return int(view_str)
-                if 'K' in view_str:
-                    num = float(re.sub(r'[^\d.]', '', view_str))
-                    return int(num * 1000)
-                elif 'M' in view_str:
-                    num = float(re.sub(r'[^\d.]', '', view_str))
-                    return int(num * 1000000)
-                elif 'B' in view_str:
-                    num = float(re.sub(r'[^\d.]', '', view_str))
-                    return int(num * 1000000000)
-                numbers = re.findall(r'\d+', view_str)
-                if numbers:
-                    return int(''.join(numbers))
-                return 0
-            except:
-                return 0
-        
-        parsed_views = parse_views(views)
-        
-        return jsonify({
-            'views': parsed_views,
-            'formatted': format_views(parsed_views),
-            'raw': views
-        })
-        
-    except Exception as e:
-        print(f"View count error for {video_id}: {e}")
-        return jsonify({'views': 0, 'error': str(e)})
+    download_name = f"{sanitize_filename(song['artist'])} - {sanitize_filename(song['title'])}.mp3"
+    
+    return send_file(filepath, as_attachment=True, download_name=download_name)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
