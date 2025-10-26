@@ -229,43 +229,46 @@
 
             const handleDownload = async (song) => {
                 setDownloading(song.id);
-                console.log('Download payload:', {
-                    videoId: song.id,
-                    title: song.title,
-                    artist: song.artist,
-                    album: song.album || '',
-                    thumbnail: song.thumbnail || ''
-                }); // Debug payload
                 try {
+                    // Optimize payload for minimal size
+                    const payload = {
+                        videoId: song.id,
+                        title: song.title,
+                        artist: song.artist,
+                        format: 'mp3', // Request MP3
+                        no_metadata: true // Request no metadata
+                    };
+                    console.log('Download payload:', payload); // Debug payload
+
                     const response = await fetch(`${API_BASE}/api/download`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            videoId: song.id, // Changed from url to videoId
-                            title: song.title,
-                            artist: song.artist,
-                            album: song.album || '',
-                            thumbnail: song.thumbnail || ''
-                        })
+                        body: JSON.stringify(payload)
                     });
 
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Download failed');
+                    }
+
                     const data = await response.json();
-                    if (response.ok && data.status === 'success') {
-                        // Trigger download using downloadUrl
+                    if (data.status === 'success') {
+                        // Use clean filename for download
+                        const cleanFilename = `${song.artist} - ${song.title}.mp3`.replace(/[<>:"/\\|?*]/g, '');
                         const link = document.createElement('a');
                         link.href = `${API_BASE}${data.downloadUrl}`;
-                        link.download = data.filename;
+                        link.download = cleanFilename;
                         document.body.appendChild(link);
                         link.click();
                         document.body.removeChild(link);
-                        
+
                         showMessage(`✅ "${song.title}" downloaded!`, 'success');
-                        await loadSongs();
-                        await loadArtists();
+                        await Promise.all([loadSongs(), loadArtists()]);
                     } else {
                         throw new Error(data.error || 'Download failed');
                     }
                 } catch (error) {
+                    console.error('Download error:', error);
                     showMessage(`❌ ${error.message}`, 'error');
                 } finally {
                     setDownloading(null);
@@ -282,15 +285,18 @@
                         a.style.display = 'none';
                         a.href = url;
                         const song = songs.find(s => s.id === songId) || { artist: 'Unknown', title: 'Unknown' };
-                        a.download = `${song.artist} - ${song.title}.m4a`.replace(/[<>:"/\\|?*]/g, '');
+                        a.download = `${song.artist} - ${song.title}.mp3`.replace(/[<>:"/\\|?*]/g, '');
                         document.body.appendChild(a);
                         a.click();
                         window.URL.revokeObjectURL(url);
                         document.body.removeChild(a);
                         showMessage('📥 Song saved to your computer!', 'success');
+                    } else {
+                        throw new Error('Failed to download file');
                     }
                 } catch (error) {
                     console.error('Download to computer failed:', error);
+                    showMessage('Failed to save song', 'error');
                 }
             };
 
@@ -726,7 +732,7 @@
                                                                 decoding="async"
                                                                 className="w-20 h-20 rounded-full mx-auto mb-3 object-cover"
                                                                 onError={(e) => {
-                                                                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSI0MCIgY3k9IjQwIiByPSI0MCIgZmlsbD0iI0VFNUU1RSIvPjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE1IiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTI1IDY1QzI1IDU3IDMyIDUwIDQwIDUwQzQ4IDUwIDU1IDU3IDU1IDY1SDI1WiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
+                                                                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSI4MCIgY3k9IjQwIiByPSI0MCIgZmlsbD0iI0VFNUU1RSIvPjxjaXJjbGUgY3g9IjQwIiBjeT0iMzAiIHI9IjE1IiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTI1IDY1QzI1IDU3IDMyIDUwIDQwIDUwQzQ4IDUwIDU1IDU3IDU1IDY1SDI1WiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
                                                                 }}
                                                             />
                                                             <h3 className="font-semibold text-white text-sm">{artist.name}</h3>
@@ -1036,7 +1042,7 @@
                                                         decoding="async"
                                                         className="w-12 h-12 rounded-lg object-cover"
                                                         onError={(e) => {
-                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA4OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
+                                                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIGZpbGw9IiNFRTVFNUUiLz48cGF0aCBkPSJNMjQgMzZMMzIgMzJMMjQgMjhMMTYgMzJMMjQgMzZaIiBmaWxsPSIjOEU4RThFIi8+PHBhdGggZD0iTTE2IDQwTDMyIDQwTDMyIDI0TDE2IDI0TDE2IDQwWiIgZmlsbD0iIzhFOEU4RSIvPjwvc3ZnPg==';
                                                         }}
                                                     />
                                                     <div className="flex-1">
