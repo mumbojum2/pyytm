@@ -776,10 +776,4 @@ def format_views(views):
     return f"{views} views"
 
 if __name__ == '__main__':
-    print("\n🎵 MusicGrab Pro - Advanced YouTube Music Downloader")
-    print("✅ Dependencies installed and ready!")
-    print("🔐 Browser.json authentication support")
-    print("📚 Library integration")
-    print("💾 Persistent user data")
-    print("🌐 Server starting on port 5000...")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=10000, debug=False)
