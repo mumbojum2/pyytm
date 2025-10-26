@@ -134,43 +134,35 @@ def get_youtube_suggestions(query):
     except:
         return []
 
-def get_views(api, query):
-    """Searches for a track or video and prints the views count."""
-    print(f"Searching for '{query}'...")
+def parse_view_count(view_str):
+    """Parse view count string into integer"""
+    if not view_str:
+        return 0
+    
     try:
-        # Search for videos, as they reliably contain view counts
-        results = api.search(query, filter='videos', limit=1)
-
-        if not results:
-            print(f"No results found for query: '{query}'.")
-            return 0
-
-        # Get the first result
-        item = results[0]
+        # Remove any non-numeric characters except K, M, B
+        view_str = str(view_str).strip().upper()
         
-        title = item.get('title', 'N/A')
-        artists = ', '.join([artist['name'] for artist in item.get('artists', []) if 'name' in artist])
-        views = item.get('views', 'View count not available')
+        # Handle numeric strings
+        if view_str.isdigit():
+            return int(view_str)
         
-        print("\n--- Top Search Result Details ---")
-        print(f"Title: {title}")
-        print(f"Artist(s): {artists}")
-        print(f"Views: {views}")
-        print("-" * 35)
+        # Handle formatted numbers (1.2K, 3.4M, 5.6B)
+        multipliers = {'K': 1000, 'M': 1000000, 'B': 1000000000}
         
-        # Return the views count as integer if possible
-        if isinstance(views, str):
-            # Remove non-numeric characters and convert to int
-            views = re.sub(r'[^\d]', '', views)
-            return int(views) if views else 0
-        elif isinstance(views, int):
-            return views
-        else:
-            return 0
-
+        for suffix, multiplier in multipliers.items():
+            if suffix in view_str:
+                # Extract the number part
+                num_part = re.sub(r'[^\d.]', '', view_str)
+                if num_part:
+                    return int(float(num_part) * multiplier)
+        
+        # If no multiplier found, try to extract just numbers
+        numbers_only = re.sub(r'[^\d]', '', view_str)
+        return int(numbers_only) if numbers_only else 0
+        
     except Exception as e:
-        print(f"\nAn error occurred while fetching view data.")
-        print(f"Detailed Error: {e}")
+        print(f"View count parsing error: {e}")
         return 0
 
 def get_personalized_recommendations():
@@ -197,7 +189,6 @@ def get_personalized_recommendations():
                 if 'title' in content:
                     video_id = content.get('videoId')
                     if video_id:  # Only include items with video IDs
-                        views = get_accurate_views(video_id)
                         recommendations.append({
                             'id': video_id,
                             'title': content['title'],
@@ -205,7 +196,7 @@ def get_personalized_recommendations():
                             'thumbnail': content['thumbnails'][-1]['url'] if content.get('thumbnails') else "",
                             'type': 'song',
                             'url': f"https://www.youtube.com/watch?v={video_id}",
-                            'views': format_views(views)
+                            'views': 'Popular'
                         })
         
         # Clean up temp file
@@ -232,7 +223,6 @@ def get_popular_recommendations():
                     try:
                         video_id = track.get('videoId')
                         if video_id:
-                            views = get_accurate_views(video_id)
                             recommendations.append({
                                 'id': video_id,
                                 'title': track['title'],
@@ -240,7 +230,7 @@ def get_popular_recommendations():
                                 'thumbnail': track['thumbnails'][-1]['url'] if track.get('thumbnails') else "",
                                 'type': 'song',
                                 'url': f"https://www.youtube.com/watch?v={video_id}",
-                                'views': format_views(views)
+                                'views': 'Popular'
                             })
                     except:
                         continue
@@ -287,7 +277,6 @@ def get_library_data():
             for song in library_songs:
                 video_id = song.get('videoId')
                 if video_id:
-                    views = get_accurate_views(video_id)
                     library_data['songs'].append({
                         'id': video_id,
                         'title': song['title'],
@@ -296,7 +285,7 @@ def get_library_data():
                         'duration': song.get('duration', '0:00'),
                         'thumbnail': song['thumbnails'][-1]['url'] if song.get('thumbnails') else "",
                         'url': f"https://www.youtube.com/watch?v={video_id}",
-                        'views': format_views(views)
+                        'views': 'In Library'
                     })
         except Exception as e:
             print(f"Library songs error: {e}")
@@ -348,7 +337,7 @@ def get_library_data():
         return {'songs': [], 'albums': [], 'artists': [], 'playlists': []}
 
 def fast_youtube_search(query, max_results=10):
-    print(f"🔍 Searching for: '{query}'")
+    print(f"🔍 FAST Searching for: '{query}'")
     if not query:
         return {'songs': [], 'artists': [], 'albums': []}
 
@@ -361,6 +350,7 @@ def fast_youtube_search(query, max_results=10):
         albums = []
         
         try:
+            # Search for songs - NO VIEW COUNT FETCHING FOR SPEED
             songs_results = yt.search(query, filter='songs', limit=max_results)
             print(f"✅ Found {len(songs_results)} songs")
             
@@ -374,8 +364,9 @@ def fast_youtube_search(query, max_results=10):
                     if song.get('thumbnails'):
                         thumbnail_url = song['thumbnails'][-1]['url'] if len(song['thumbnails']) > 1 else song['thumbnails'][0]['url']
                     
-                    # Get actual view count using the new function
-                    views = get_accurate_views(video_id)
+                    # Use view count from search results if available, otherwise skip
+                    raw_views = song.get('views')
+                    views = parse_view_count(raw_views) if raw_views else 0
                     
                     songs.append({
                         'id': video_id,
@@ -436,7 +427,7 @@ def fast_youtube_search(query, max_results=10):
         except Exception as albums_error:
             print(f"❌ Albums search failed: {albums_error}")
         
-        print(f"🎯 Search complete: {len(songs)} songs, {len(artists)} artists, {len(albums)} albums")
+        print(f"🎯 FAST Search complete: {len(songs)} songs, {len(artists)} artists, {len(albums)} albums")
         return {
             'songs': songs,
             'artists': artists,
@@ -446,45 +437,6 @@ def fast_youtube_search(query, max_results=10):
     except Exception as e:
         print(f"❌ Search function failed completely: {e}")
         return {'songs': [], 'artists': [], 'albums': []}
-
-def get_accurate_views(video_id):
-    """Get actual view count from YouTube using the new function"""
-    print(f"🔍 Getting views for: {video_id}")
-    if not video_id:
-        return 0
-        
-    try:
-        from ytmusicapi import YTMusic
-        yt = YTMusic()
-        
-        # Use the new get_views function approach
-        # Search for the video to get view count
-        search_results = yt.search(video_id, filter='videos', limit=1)
-        
-        if search_results:
-            item = search_results[0]
-            views = item.get('views', 0)
-            
-            print(f"📊 Raw view count: {views}")
-            
-            if views:
-                # Convert to integer, handling string formats
-                if isinstance(views, str):
-                    # Remove commas and non-numeric characters
-                    views = re.sub(r'[^\d]', '', views)
-                result = int(views) if views else 0
-                print(f"🎯 Processed view count: {result}")
-                return result
-            else:
-                print("❌ No view count found")
-                return 0
-        else:
-            print("❌ No search results found for video")
-            return 0
-            
-    except Exception as e:
-        print(f"❌ View count error for {video_id}: {e}")
-        return 0
 
 def get_artist_songs(artist_id):
     try:
@@ -502,7 +454,6 @@ def get_artist_songs(artist_id):
                 album_details = yt.get_album(album['browseId'])
                 for track in album_details['tracks']:
                     video_id = track.get('videoId')
-                    views = get_accurate_views(video_id)
                     
                     songs.append({
                         'id': video_id,
@@ -511,7 +462,7 @@ def get_artist_songs(artist_id):
                         'album': album['title'],
                         'thumbnail': track['thumbnails'][0]['url'] if track.get('thumbnails') else "",
                         'url': f"https://www.youtube.com/watch?v={video_id}" if video_id else "",
-                        'views': format_views(views)
+                        'views': 'Album Track'
                     })
             except Exception as album_error:
                 print(f"Album error: {album_error}")
@@ -779,7 +730,7 @@ def download():
         # Download directly as MP3 with proper filename
         output_template = os.path.join('downloads', f'{filename}.mp3')
         
-        # Download with metadata - force MP3 format - KEEP COOKIES PARAMETER
+        # Download with metadata - force MP3 format - WITH COOKIES
         cmd = [
             sys.executable, '-m', 'yt_dlp',
             '-x', '--audio-format', 'mp3',
@@ -790,8 +741,7 @@ def download():
             '--parse-metadata', 'uploader:%(artist)s',
             '-o', output_template,
             '--no-warnings',
-            '--quiet',
-            '--cookies', 'cookies.txt',
+            '--cookies', 'cookies.txt',  # KEEP COOKIES FOR AGE-RESTRICTED CONTENT
             url
         ]
 
@@ -837,6 +787,13 @@ def download():
                 return jsonify({'error': 'Downloaded file not found'}), 500
         else:
             print(f"❌ Download command failed: {result.stderr}")
+            # Try without cookies if cookies fail
+            if "Sign in to confirm" in result.stderr:
+                print("🔄 Trying download without cookies...")
+                cmd_without_cookies = [c for c in cmd if c != '--cookies' and c != 'cookies.txt']
+                result = subprocess.run(cmd_without_cookies, capture_output=True, text=True, timeout=300)
+                if result.returncode == 0:
+                    return jsonify({'error': 'Download requires authentication. Please add cookies.txt file.'}), 400
             return jsonify({'error': 'Download failed'}), 500
             
     except Exception as e:
@@ -903,4 +860,3 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
