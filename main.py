@@ -763,6 +763,7 @@ def download():
             '--sleep-interval', '5',  # Rate limit
             '--max-sleep-interval', '10',
             '--extractor-args', 'youtube:player_client=ios',  # iOS client bypass
+            url
         ] + evasion_opts  # Add UA and referer
 
         attempts = 0
@@ -924,6 +925,7 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
 
