@@ -1,10 +1,8 @@
 # YouTube Music Downloader - "MusicGrab Pro"
 # Complete Flask backend with React frontend
 # main.py (deployable on Koyeb/Vercel)
-#lol
 
 import os
-import yt_dlp
 import json
 import subprocess
 import sys
@@ -19,6 +17,7 @@ import urllib.parse
 import base64
 import tempfile
 import signal
+import yt_dlp  # Added import
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
@@ -36,57 +35,6 @@ search_history = []
 browser_json_content = ""
 user_authenticated = False
 
-#def install_dependencies():
-#    """Install required dependencies"""
-#    print("🔍 Checking dependencies...")
-#    
-#    dependencies = ['yt-dlp', 'flask', 'flask-cors', 'requests', 'ytmusicapi', 'mutagen']
-#    
-#    for package in dependencies:
-#        try:
-#            if package == 'yt-dlp':
-#                __import__('yt_dlp')
-#            elif package == 'ytmusicapi':
-#                __import__('ytmusicapi')
-#            elif package == 'mutagen':
-#                __import__('mutagen')
-#            else:
-#                __import__(package.replace('-', '_'))
-#            print(f"✅ {package} installed")
-#        except ImportError:
-#            print(f"📦 Installing {package}...")
-#            try:
-#                subprocess.check_call(
-#                    [sys.executable, "-m", "pip", "install", package],
-#                    stdout=subprocess.DEVNULL,
-#                    stderr=subprocess.DEVNULL
-#                )
-#                print(f"✅ {package} installed successfully")
-#            except Exception as e:
-#                print(f"❌ Failed to install {package}: {e}")
-#
-#    # Upgrade yt-dlp to latest for bot detection fixes
-#    print("🔄 Upgrading yt-dlp...")
-#    try:
-#        subprocess.check_call(
-#            [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
-#            stdout=subprocess.DEVNULL,
-#            stderr=subprocess.DEVNULL
-#        )
-#        print("✅ yt-dlp upgraded")
-#    except Exception as e:
-#        print(f"⚠️ yt-dlp upgrade failed: {e}")
-#
-#    # Install ffmpeg
-##    print("🔧 Installing ffmpeg...")
-##    try:
-##        subprocess.run(['apt-get', 'update'], check=False, capture_output=True)
-##        subprocess.run(['apt-get', 'install', '-y', 'ffmpeg'], check=False, capture_output=True)
-##        print("✅ ffmpeg installed")
-##    except Exception as e:
-##        print(f"⚠️ ffmpeg issues: {e}")
-#
-#install_dependencies()
 # Load user data at startup
 def load_user_data():
     """Load user data from files"""
@@ -155,8 +103,8 @@ def parse_view_count(view_str):
         return 0
     
     try:
-        # Remove any non-numeric characters except K, M, B
-        view_str = str(view_str).strip().upper()
+        # Remove any non-numeric characters except K, M, B and decimal points
+        view_str = str(view_str).strip().upper().replace(',', '').replace(' ', '')
         
         # Handle numeric strings
         if view_str.isdigit():
@@ -167,7 +115,7 @@ def parse_view_count(view_str):
         
         for suffix, multiplier in multipliers.items():
             if suffix in view_str:
-                # Extract the number part
+                # Extract the number part including decimals
                 num_part = re.sub(r'[^\d.]', '', view_str)
                 if num_part:
                     return int(float(num_part) * multiplier)
@@ -177,7 +125,7 @@ def parse_view_count(view_str):
         return int(numbers_only) if numbers_only else 0
         
     except Exception as e:
-        print(f"View count parsing error: {e}")
+        print(f"View count parsing error for '{view_str}': {e}")
         return 0
 
 def get_personalized_recommendations():
@@ -229,21 +177,47 @@ def get_popular_recommendations():
         from ytmusicapi import YTMusic
         yt = YTMusic()
         
-        charts = yt.get_charts(country='US') or {}  # Safely handle None
+        charts = yt.get_charts(country='US') or {}
         recommendations = []
         
-        # Safely access songs chart
-        songs_chart = next((chart for chart in charts.get('charts', []) if chart['title'] in ['Top songs', 'Trending']), None)
+        # Safely access charts with better error handling
+        charts_list = charts.get('charts', [])
+        if not charts_list:
+            return get_fallback_recommendations()
+            
+        # Find trending or top songs chart
+        songs_chart = None
+        for chart in charts_list:
+            if chart.get('title') in ['Top songs', 'Trending']:
+                songs_chart = chart
+                break
+        
         if songs_chart:
-            for track in songs_chart.get('items', [])[:12]:
+            items = songs_chart.get('items', [])
+            for track in items[:12]:
                 try:
                     video_id = track.get('videoId')
                     if video_id:
+                        # Safely get artists
+                        artists_list = track.get('artists', [])
+                        artist_names = []
+                        for artist in artists_list:
+                            if isinstance(artist, dict) and 'name' in artist:
+                                artist_names.append(artist['name'])
+                        
+                        artist_str = ", ".join(artist_names) if artist_names else 'Unknown Artist'
+                        
+                        # Safely get thumbnails
+                        thumbnails = track.get('thumbnails', [])
+                        thumbnail_url = ""
+                        if thumbnails:
+                            thumbnail_url = thumbnails[-1].get('url', '') if len(thumbnails) > 1 else thumbnails[0].get('url', '')
+                        
                         recommendations.append({
                             'id': video_id,
                             'title': track.get('title', 'Unknown Track'),
-                            'artist': ", ".join([artist['name'] for artist in track.get('artists', [])]) or 'Unknown Artist',
-                            'thumbnail': track['thumbnails'][-1]['url'] if track.get('thumbnails') else "",
+                            'artist': artist_str,
+                            'thumbnail': thumbnail_url,
                             'type': 'song',
                             'url': f"https://www.youtube.com/watch?v={video_id}",
                             'views': 'Popular'
@@ -368,7 +342,7 @@ def fast_youtube_search(query, max_results=10):
         albums = []
         
         try:
-            # Search for songs - NO VIEW COUNT FETCHING FOR SPEED
+            # Search for songs
             songs_results = yt.search(query, filter='songs', limit=max_results)
             print(f"✅ Found {len(songs_results)} songs")
             
@@ -382,7 +356,7 @@ def fast_youtube_search(query, max_results=10):
                     if song.get('thumbnails'):
                         thumbnail_url = song['thumbnails'][-1]['url'] if len(song['thumbnails']) > 1 else song['thumbnails'][0]['url']
                     
-                    # Use view count from search results if available, otherwise skip
+                    # Get view count properly
                     raw_views = song.get('views')
                     views = parse_view_count(raw_views) if raw_views else 0
                     
@@ -779,24 +753,32 @@ def download():
             'filename': filename
         })
 
-    # Download with yt-dlp
+    # Download with yt-dlp - FIXED FORMAT OPTIONS
     ydl_opts = {
-        'format': 'bestaudio[ext=mp3]',
-        'outtmpl': file_path,
+        'format': 'bestaudio[ext=m4a]/bestaudio/best',
+        'outtmpl': file_path.replace('.mp3', '.%(ext)s'),  # Let yt-dlp handle extension
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
         'cookiefile': os.path.join(BASE_DIR, 'cookies.txt'),
         'noplaylist': True,
-        'quiet': True,
-        'no_warnings': True,
-        'noprogress': True
+        'quiet': False,
+        'no_warnings': False,
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+        
+        # The file will be downloaded with .mp3 extension due to postprocessor
+        mp3_file_path = file_path.replace('.mp3', '.mp3')  # Already correct
+        
         print(f"✅ Downloaded {filename}")
 
         # Add metadata and thumbnail
-        add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
+        add_metadata_to_file(mp3_file_path, title, artist, album, thumbnail_url)
 
         # Update user data
         songs_db.append({
@@ -878,7 +860,3 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
-
-
-
