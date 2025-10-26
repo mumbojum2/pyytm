@@ -1,375 +1,408 @@
+from flask import Flask, request, jsonify, send_file
 import os
 import json
 import time
-from datetime import datetime
-from flask import Flask, jsonify, request, send_file
-from flask_cors import CORS
-import yt-dlp
+import subprocess
+import logging
 from ytmusicapi import YTMusic
-import requests
 from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, TIT2, TPE1, TALB, APIC
+import yt_dlp  # Correct import
+import threading
+from flask_cors import CORS
+import re
 
-app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:8000", "https://*.ngrok-free.app"]}})  # Support Ngrok and local
+app = Flask(__name__, static_folder='static', static_url_path='')
+CORS(app)
 
-# Define directories and files
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DOWNLOAD_DIR = os.path.join(BASE_DIR, 'downloads')
-USER_DATA_FILE = os.path.join(BASE_DIR, 'user_data.json')
-COOKIES_FILE = os.path.join(BASE_DIR, 'cookies.txt')
-
-# Ensure download directory exists
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+# Logging setup
+logging.basicConfig(filename='/tmp/flask.log', level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Initialize YTMusic
 try:
-    ytmusic = YTMusic(COOKIES_FILE)
+    ytmusic = YTMusic('cookies.txt')
+    logger.info("✅ User data loaded successfully")
 except Exception as e:
-    print(f"Failed to initialize YTMusic: {e}")
+    logger.error(f"Failed to initialize YTMusic: {str(e)}")
     ytmusic = None
 
-# Load user data
-user_data = {'songs': [], 'artists': {}, 'search_history': []}
-try:
-    if os.path.exists(USER_DATA_FILE):
-        with open(USER_DATA_FILE, 'r') as f:
-            user_data = json.load(f)
-except Exception as e:
-    print(f"Failed to load user data: {e}")
+# Data storage
+SONGS_FILE = 'songs.json'
+ARTISTS_FILE = 'artists.json'
+SEARCH_HISTORY_FILE = 'search_history.json'
 
-def save_user_data():
+def load_json(file_path, default):
     try:
-        with open(USER_DATA_FILE, 'w') as f:
-            json.dump(user_data, f, indent=4)
-    except Exception as e:
-        print(f"Failed to save user data: {e}")
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return default
 
-def add_metadata(file_path, title, artist, album, thumbnail_url):
+def save_json(file_path, data):
+    with open(file_path, 'w') as f:
+        json.dump(data, f, indent=2)
+
+songs = load_json(SONGS_FILE, [])
+artists = load_json(ARTISTS_FILE, {})
+search_history = load_json(SEARCH_HISTORY_FILE, [])
+
+def save_song(song_data):
+    global songs
+    songs.append(song_data)
+    save_json(SONGS_FILE, songs)
+    artist = song_data.get('artist', 'Unknown')
+    artists[artist] = artists.get(artist, 0) + 1
+    save_json(ARTISTS_FILE, artists)
+
+@app.route('/')
+def index():
+    return app.send_static_file('index.html')
+
+@app.route('/api/home')
+def get_home_data():
     try:
-        audio = MP3(file_path, ID3=ID3)
-        # Add ID3 tag if it doesn't exist
-        try:
-            audio.add_tags()
-        except:
-            pass
-        audio.tags['TIT2'] = TIT2(encoding=3, text=title)
-        audio.tags['TPE1'] = TPE1(encoding=3, text=artist)
-        if album:
-            audio.tags['TALB'] = TALB(encoding=3, text=album)
-        # Download and embed thumbnail
-        if thumbnail_url:
-            response = requests.get(thumbnail_url)
-            if response.status_code == 200:
-                audio.tags['APIC'] = APIC(
-                    encoding=3,  # UTF-8
-                    mime='image/jpeg',
-                    type=3,  # Cover (front)
-                    desc='Cover',
-                    data=response.content
-                )
-        audio.save()
-        print(f"✅ Added metadata to {file_path}")
-    except Exception as e:
-        print(f"Metadata error: {e}")
-
-@app.route('/api/home', methods=['GET'])
-def home():
-    try:
-        recommendations = []
-        featured = []
-        authenticated = is_authenticated()
-
-        if authenticated:
-            recommendations = ytmusic.get_home(limit=12) or []
+        if ytmusic:
+            home_data = ytmusic.get_home(limit=12)
+            recommendations = []
+            for item in home_data:
+                try:
+                    if 'videos' in item:
+                        for video in item.get('videos', []):
+                            recommendations.append({
+                                'id': video.get('videoId', ''),
+                                'title': video.get('title', 'Unknown'),
+                                'artist': video.get('artist', 'Unknown'),
+                                'thumbnail': video.get('thumbnail', {}).get('thumbnails', [{}])[-1].get('url', '')
+                            })
+                except (IndexError, KeyError) as e:
+                    logger.error(f"Error processing home item: {str(e)}")
+                    continue
+            return jsonify({
+                'recommendations': recommendations[:6],
+                'featured': [
+                    {'id': 'new', 'title': 'New Releases', 'subtitle': 'Discover new music', 'icon': 'fas fa-fire', 'color': 'from-purple-500 to-pink-500'},
+                    {'id': 'charts', 'title': 'Top Charts', 'subtitle': 'Trending songs', 'icon': 'fas fa-chart-line', 'color': 'from-blue-500 to-indigo-500'},
+                    {'id': 'genres', 'title': 'Genres', 'subtitle': 'Explore by mood', 'icon': 'fas fa-guitar', 'color': 'from-green-500 to-teal-500'},
+                    {'id': 'playlists', 'title': 'Playlists', 'subtitle': 'Curated for you', 'icon': 'fas fa-list', 'color': 'from-red-500 to-orange-500'}
+                ],
+                'authenticated': bool(ytmusic)
+            })
         else:
-            recommendations = ytmusic.search(query="pop", filter="songs", limit=12) or []
-            featured = [
-                {
-                    'id': '1', 'title': 'Explore Music', 'subtitle': 'Discover new tracks', 
-                    'icon': 'fas fa-compass', 'color': 'from-blue-500 to-indigo-600'
-                },
-                {
-                    'id': '2', 'title': 'Top Hits', 'subtitle': 'Today\'s biggest songs', 
-                    'icon': 'fas fa-star', 'color': 'from-yellow-500 to-orange-600'
-                },
-                {
-                    'id': '3', 'title': 'New Releases', 'subtitle': 'Fresh music drops', 
-                    'icon': 'fas fa-fire', 'color': 'from-red-500 to-pink-600'
-                },
-                {
-                    'id': '4', 'title': 'Your Library', 'subtitle': 'Your saved music', 
-                    'icon': 'fas fa-heart', 'color': 'from-purple-500 to-pink-600'
-                }
-            ]
-
-        formatted_recommendations = []
-        for item in recommendations:
-            try:
-                artist = item.get('artists', [{}])[0].get('name', 'Unknown')
-                thumbnail = item.get('thumbnails', [{}])[0].get('url', '')
-                formatted_recommendations.append({
-                    'id': item.get('videoId', ''),
-                    'title': item.get('title', 'Unknown'),
-                    'artist': artist,
-                    'thumbnail': thumbnail
-                })
-            except (IndexError, KeyError, TypeError):
-                continue  # Skip invalid items
-
-        return jsonify({
-            'recommendations': formatted_recommendations,
-            'featured': featured,
-            'authenticated': authenticated
-        })
+            return jsonify({'recommendations': [], 'featured': [], 'authenticated': False})
     except Exception as e:
-        print(f"Popular recommendations error: {e}")
-        return jsonify({
-            'recommendations': [],
-            'featured': featured,
-            'authenticated': authenticated
-        }), 200
-
-@app.route('/api/songs', methods=['GET'])
-def get_songs():
-    return jsonify({'songs': user_data['songs']})
-
-@app.route('/api/artists', methods=['GET'])
-def get_artists():
-    return jsonify({'artists': user_data['artists']})
-
-@app.route('/api/search-history', methods=['GET'])
-def get_search_history():
-    return jsonify({'history': user_data['search_history']})
+        logger.error(f"Home data error: {str(e)}")
+        return jsonify({'recommendations': [], 'featured': [], 'authenticated': False})
 
 @app.route('/api/suggestions', methods=['POST'])
-def suggestions():
-    query = request.get_json().get('query', '').strip()
-    if not query:
+def get_suggestions():
+    query = request.json.get('query', '').strip()
+    if not query or not ytmusic:
         return jsonify({'suggestions': []})
     try:
-        suggestions = ytmusic.get_search_suggestions(query) if ytmusic else []
-        return jsonify({'suggestions': suggestions[:10]})
+        suggestions = ytmusic.get_search_suggestions(query)[:5]
+        return jsonify({'suggestions': suggestions})
     except Exception as e:
-        print(f"Suggestions error: {e}")
+        logger.error(f"Suggestions error: {str(e)}")
         return jsonify({'suggestions': []})
 
 @app.route('/api/search', methods=['POST'])
 def search():
-    query = request.get_json().get('query', '').strip()
+    query = request.json.get('query', '').strip()
     if not query:
-        return jsonify({'error': 'No query provided'}), 400
-    print(f"🔍 API Search called for: '{query}'")
+        return jsonify({'error': 'Query is required'}), 400
+    logger.info(f"🔍 API Search called for: '{query}'")
     try:
-        print(f"🔍 FAST Searching for: '{query}'")
-        search_results = ytmusic.search(query, filter='songs', limit=20) if ytmusic else []
-        songs = [{
-            'id': item['videoId'],
-            'title': item['title'],
-            'artist': item['artists'][0]['name'] if item['artists'] else 'Unknown',
+        logger.info(f"🔍 FAST Searching for: '{query}'")
+        search_results = ytmusic.search(query, filter='songs', limit=20)
+        songs_data = [{
+            'id': item.get('videoId', ''),
+            'title': item.get('title', 'Unknown'),
+            'artist': item.get('artists', [{}])[0].get('name', 'Unknown'),
             'album': item.get('album', {}).get('name', ''),
-            'thumbnail': item['thumbnails'][0]['url'] if item['thumbnails'] else '',
+            'thumbnail': item.get('thumbnails', [{}])[-1].get('url', ''),
             'duration': item.get('duration', 'Unknown'),
             'views': item.get('views', 'Unknown'),
             'is_explicit': item.get('isExplicit', False)
         } for item in search_results]
-        print(f"✅ Found {len(songs)} songs")
-
-        search_results = ytmusic.search(query, filter='artists', limit=20) if ytmusic else []
-        artists = [{
-            'id': item['browseId'],
-            'name': item['artist'],
-            'thumbnail': item['thumbnails'][0]['url'] if item['thumbnails'] else ''
-        } for item in search_results]
-        print(f"✅ Found {len(artists)} artists")
-
-        search_results = ytmusic.search(query, filter='albums', limit=20) if ytmusic else []
-        albums = [{
-            'id': item['browseId'],
-            'title': item['title'],
-            'artist': item['artist'],
-            'thumbnail': item['thumbnails'][0]['url'] if item['thumbnails'] else '',
+        logger.info(f"✅ Found {len(songs_data)} songs")
+        
+        search_results_artists = ytmusic.search(query, filter='artists', limit=20)
+        artists_data = [{
+            'id': item.get('artistId', ''),
+            'name': item.get('artist', 'Unknown'),
+            'thumbnail': item.get('thumbnails', [{}])[-1].get('url', '')
+        } for item in search_results_artists]
+        logger.info(f"✅ Found {len(artists_data)} artists")
+        
+        search_results_albums = ytmusic.search(query, filter='albums', limit=20)
+        albums_data = [{
+            'id': item.get('albumId', ''),
+            'title': item.get('title', 'Unknown'),
+            'artist': item.get('artists', [{}])[0].get('name', 'Unknown'),
+            'thumbnail': item.get('thumbnails', [{}])[-1].get('url', ''),
             'year': item.get('year', '')
-        } for item in search_results]
-        print(f"✅ Found {len(albums)} albums")
-
-        print(f"🎯 FAST Search complete: {len(songs)} songs, {len(artists)} artists, {len(albums)} albums")
-        if query not in user_data['search_history']:
-            user_data['search_history'] = ([query] + user_data['search_history'])[:10]
-            save_user_data()
-        print(f"✅ API Search completed for: '{query}'")
-        return jsonify({'songs': songs, 'artists': artists, 'albums': albums})
-    except Exception as e:
-        print(f"Search error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/artist/<artist_id>', methods=['GET'])
-def artist(artist_id):
-    try:
-        artist_info = ytmusic.get_artist(artist_id) if ytmusic else {}
-        songs = ytmusic.get_artist_songs(artist_id, limit=20) if ytmusic else []
+        } for item in search_results_albums]
+        logger.info(f"✅ Found {len(albums_data)} albums")
+        
+        if query not in search_history:
+            search_history.append(query)
+            if len(search_history) > 10:
+                search_history.pop(0)
+            save_json(SEARCH_HISTORY_FILE, search_history)
+        
+        logger.info(f"🎯 FAST Search complete: {len(songs_data)} songs, {len(artists_data)} artists, {len(albums_data)} albums")
         return jsonify({
-            'artist': artist_info.get('name', 'Unknown'),
-            'thumbnail': artist_info['thumbnails'][0]['url'] if artist_info.get('thumbnails') else '',
-            'description': artist_info.get('description', ''),
-            'songs': [{
-                'id': song['videoId'],
-                'title': song['title'],
-                'album': song.get('album', {}).get('name', ''),
-                'thumbnail': song['thumbnails'][0]['url'] if song['thumbnails'] else '',
-                'duration': song.get('duration', 'Unknown'),
-                'views': song.get('views', 'Unknown')
-            } for song in songs]
+            'songs': songs_data,
+            'artists': artists_data,
+            'albums': albums_data
         })
     except Exception as e:
-        print(f"Artist error: {e}")
+        logger.error(f"Search error: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/artist/<artist_id>')
+def get_artist(artist_id):
+    try:
+        artist_data = ytmusic.get_artist(artist_id)
+        songs = [{
+            'id': song.get('videoId', ''),
+            'title': song.get('title', 'Unknown'),
+            'album': song.get('album', {}).get('name', ''),
+            'thumbnail': song.get('thumbnails', [{}])[-1].get('url', ''),
+            'duration': song.get('duration', 'Unknown'),
+            'views': song.get('views', 'Unknown')
+        } for song in artist_data.get('songs', {}).get('results', [])]
+        return jsonify({
+            'artist': artist_data.get('name', 'Unknown'),
+            'thumbnail': artist_data.get('thumbnails', [{}])[-1].get('url', ''),
+            'description': artist_data.get('description', ''),
+            'songs': songs
+        })
+    except Exception as e:
+        logger.error(f"Artist error: {str(e)}")
+        return jsonify({'error': str(e)}), 404
+
+@app.route('/api/songs')
+def get_songs():
+    return jsonify({'songs': songs})
+
+@app.route('/api/artists')
+def get_artists():
+    return jsonify({'artists': artists})
+
+@app.route('/api/search-history')
+def get_search_history():
+    return jsonify({'history': search_history})
+
+def add_metadata_to_file(file_path, title, artist, album, thumbnail_url):
+    try:
+        audio = MP3(file_path, ID3=ID3)
+        if not audio.tags:
+            audio.add_tags()
+        
+        audio.tags.add(TIT2(encoding=3, text=title))
+        audio.tags.add(TPE1(encoding=3, text=artist))
+        if album:
+            audio.tags.add(TALB(encoding=3, text=album))
+        
+        if thumbnail_url:
+            try:
+                import requests
+                response = requests.get(thumbnail_url, timeout=5)
+                if response.status_code == 200:
+                    audio.tags.add(APIC(
+                        encoding=3,
+                        mime='image/jpeg',
+                        type=3,
+                        desc='Cover',
+                        data=response.content
+                    ))
+            except Exception as e:
+                logger.error(f"Failed to add thumbnail: {str(e)}")
+        
+        audio.save()
+        logger.info(f"✅ Metadata added to {file_path}")
+    except Exception as e:
+        logger.error(f"Metadata error: {str(e)}")
 
 @app.route('/api/download', methods=['POST'])
 def download():
-    data = request.get_json()
+    data = request.json
     video_id = data.get('videoId')
     title = data.get('title', 'Unknown')
     artist = data.get('artist', 'Unknown')
     album = data.get('album', '')
-    thumbnail_url = data.get('thumbnail', '')
+    thumbnail = data.get('thumbnail', '')
     format = data.get('format', 'mp3')
 
     if not video_id:
-        return jsonify({'error': 'No videoId provided'}), 400
+        return jsonify({'error': 'Video ID is required'}), 400
 
-    sanitized_title = "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip()
-    sanitized_artist = "".join(c for c in artist if c.isalnum() or c in (" ", "-", "_")).strip()
-    filename = f"{sanitized_artist} - {sanitized_title}_{video_id}.mp3"
-    file_path = os.path.join(DOWNLOAD_DIR, filename)
+    output_dir = 'downloads'
+    os.makedirs(output_dir, exist_ok=True)
+    sanitized_title = re.sub(r'[<>:"/\\|?*]', '', title)
+    output_file = os.path.join(output_dir, f"{sanitized_title}.{format}")
 
-    # Check if file exists (cache hit)
-    if os.path.exists(file_path):
-        print(f"✅ Cache hit for {filename}")
-        add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
-        songs_db.append({
+    if os.path.exists(output_file):
+        logger.info(f"📂 Using cached file: {output_file}")
+        song_data = {
             'id': video_id,
             'title': title,
             'artist': artist,
             'album': album,
-            'filename': filename,
-            'thumbnail': thumbnail_url,
+            'thumbnail': thumbnail,
             'downloaded_at': time.strftime('%Y-%m-%d %H:%M:%S')
-        })
-        artists_db[artist] = artists_db.get(artist, 0) + 1
-        save_user_data()
-        return jsonify({
-            'status': 'success',
-            'downloadUrl': f"/downloads/{filename}",
-            'filename': filename
-        })
-
-    # Download with yt-dlp
-    ydl-opts = {
-        'format': 'bestaudio[ext=mp3]',
-        'outtmpl': file_path,
-        'cookiefile': os.path.join(BASE_DIR, 'cookies.txt'),
-        'noplaylist': True,
-        'quiet': True,
-        'no_warnings': True,
-        'noprogress': True
-    }
+        }
+        save_song(song_data)
+        return jsonify({'status': 'success', 'downloadUrl': f"/downloads/{sanitized_title}.{format}"})
 
     try:
-        with yt-dlp.YoutubeDL(ydl-opts) as ydl:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': output_file,
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': format,
+                'preferredquality': '192',
+            }],
+            'quiet': True,
+            'no_warnings': True,
+            'noprogress': True,
+            'cookiefile': 'cookies.txt',
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
-        print(f"✅ Downloaded {filename}")
 
-        # Add metadata and thumbnail
-        add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
+        if not os.path.exists(output_file):
+            return jsonify({'error': 'Download failed'}), 500
 
-        # Update user data
-        songs_db.append({
+        add_metadata_to_file(output_file, title, artist, album, thumbnail)
+
+        song_data = {
             'id': video_id,
             'title': title,
             'artist': artist,
             'album': album,
-            'filename': filename,
-            'thumbnail': thumbnail_url,
+            'thumbnail': thumbnail,
             'downloaded_at': time.strftime('%Y-%m-%d %H:%M:%S')
-        })
-        artists_db[artist] = artists_db.get(artist, 0) + 1
-        save_user_data()
+        }
+        save_song(song_data)
 
-        return jsonify({
-            'status': 'success',
-            'downloadUrl': f"/downloads/{filename}",
-            'filename': filename
-        })
+        return jsonify({'status': 'success', 'downloadUrl': f"/downloads/{sanitized_title}.{format}"})
     except Exception as e:
-        print(f"Download error: {e}")
+        logger.error(f"Download error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/downloads/<filename>', methods=['GET'])
+@app.route('/downloads/<filename>')
 def serve_download(filename):
-    file_path = os.path.join(DOWNLOAD_DIR, filename)
+    file_path = os.path.join('downloads', filename)
     if os.path.exists(file_path):
-        # Use client-side filename override for clean name
-        return send_file(file_path, as_attachment=True, download_name=filename)
+        return send_file(file_path, as_attachment=True)
     return jsonify({'error': 'File not found'}), 404
 
-@app.route('/api/play-song/<song_id>', methods=['GET'])
+@app.route('/api/download-file/<song_id>')
+def download_file(song_id):
+    song = next((s for s in songs if s['id'] == song_id), None)
+    if not song:
+        return jsonify({'error': 'Song not found'}), 404
+
+    file_path = os.path.join('downloads', f"{re.sub(r'[<>:"/\\|?*]', '', song['title'])}.mp3")
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True)
+    return jsonify({'error': 'File not found'}), 404
+
+@app.route('/api/play-song/<song_id>')
 def play_song(song_id):
-    for song in user_data['songs']:
-        if song['id'] == song_id:
-            filename = f"{song['artist']} - {song['title']}_{song_id}.mp3"
-            file_path = os.path.join(DOWNLOAD_DIR, filename)
-            if os.path.exists(file_path):
-                return send_file(file_path, mimetype='audio/mpeg')
-    return jsonify({'error': 'Song not found'}), 404
+    song = next((s for s in songs if s['id'] == song_id), None)
+    if not song:
+        return jsonify({'error': 'Song not found'}), 404
+
+    file_path = os.path.join('downloads', f"{re.sub(r'[<>:"/\\|?*]', '', song['title'])}.mp3")
+    if os.path.exists(file_path):
+        return send_file(file_path, mimetype='audio/mpeg')
+    return jsonify({'error': 'File not found'}), 404
 
 @app.route('/api/authenticate', methods=['POST'])
 def authenticate():
-    browser_json = request.get_json().get('browserJson', '')
+    data = request.json
+    browser_json = data.get('browserJson', '')
+    if not browser_json:
+        return jsonify({'error': 'browser.json content is required'}), 400
+
     try:
         with open('browser.json', 'w') as f:
             f.write(browser_json)
         global ytmusic
         ytmusic = YTMusic('browser.json')
-        os.remove('browser.json')
         return jsonify({'success': True})
     except Exception as e:
-        print(f"Authentication error: {e}")
+        logger.error(f"Authentication error: {str(e)}")
         return jsonify({'error': str(e)}), 400
 
-@app.route('/api/library', methods=['GET'])
-def library():
+@app.route('/api/library')
+def get_library():
+    if not ytmusic:
+        return jsonify({'library': {'songs': [], 'albums': [], 'artists': [], 'playlists': []}, 'authenticated': False})
+
     try:
-        library_data = {'songs': [], 'albums': [], 'artists': [], 'playlists': []}
-        if ytmusic:
-            library_songs = ytmusic.get_library_songs(limit=50)
-            library_data['songs'] = [{
-                'id': song['videoId'],
-                'title': song['title'],
-                'artist': song['artists'][0]['name'] if song['artists'] else 'Unknown',
-                'album': song.get('album', {}).get('name', ''),
-                'thumbnail': song['thumbnails'][0]['url'] if song['thumbnails'] else '',
-                'duration': song.get('duration', 'Unknown')
-            } for song in library_songs]
-            library_data['artists'] = ytmusic.get_library_artists(limit=20)
-            library_data['albums'] = ytmusic.get_library_albums(limit=20)
-            library_data['playlists'] = ytmusic.get_library_playlists(limit=20)
-        return jsonify({'library': library_data, 'authenticated': bool(ytmusic)})
+        library_songs = ytmusic.get_library_songs(limit=100)
+        songs_data = [{
+            'id': song.get('videoId', ''),
+            'title': song.get('title', 'Unknown'),
+            'artist': song.get('artists', [{}])[0].get('name', 'Unknown'),
+            'album': song.get('album', {}).get('name', ''),
+            'thumbnail': song.get('thumbnails', [{}])[-1].get('url', ''),
+            'duration': song.get('duration', 'Unknown')
+        } for song in library_songs]
+        
+        library_artists = ytmusic.get_library_artists(limit=50)
+        artists_data = [{
+            'id': artist.get('artistId', ''),
+            'name': artist.get('artist', 'Unknown'),
+            'thumbnail': artist.get('thumbnails', [{}])[-1].get('url', '')
+        } for artist in library_artists]
+        
+        library_albums = ytmusic.get_library_albums(limit=50)
+        albums_data = [{
+            'id': album.get('albumId', ''),
+            'title': album.get('title', 'Unknown'),
+            'artist': album.get('artists', [{}])[0].get('name', 'Unknown'),
+            'thumbnail': album.get('thumbnails', [{}])[-1].get('url', ''),
+            'year': album.get('year', '')
+        } for album in library_albums]
+        
+        playlists = ytmusic.get_library_playlists(limit=50)
+        playlists_data = [{
+            'id': playlist.get('playlistId', ''),
+            'title': playlist.get('title', 'Unknown'),
+            'count': playlist.get('count', 0)
+        } for playlist in playlists]
+        
+        return jsonify({
+            'library': {
+                'songs': songs_data,
+                'artists': artists_data,
+                'albums': albums_data,
+                'playlists': playlists_data
+            },
+            'authenticated': True
+        })
     except Exception as e:
-        print(f"Library error: {e}")
+        logger.error(f"Library error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/export-data', methods=['GET'])
+@app.route('/api/export-data')
 def export_data():
-    try:
-        return send_file(
-            USER_DATA_FILE,
-            as_attachment=True,
-            download_name=f"musicgrab_backup_{datetime.now().strftime('%Y-%m-%d')}.json"
-        )
-    except Exception as e:
-        print(f"Export error: {e}")
-        return jsonify({'error': str(e)}), 500
+    data = {
+        'songs': songs,
+        'artists': artists,
+        'search_history': search_history
+    }
+    file_path = 'backup.json'
+    save_json(file_path, data)
+    return send_file(file_path, as_attachment=True)
 
 @app.route('/api/import-data', methods=['POST'])
 def import_data():
@@ -377,12 +410,17 @@ def import_data():
         return jsonify({'error': 'No file provided'}), 400
     file = request.files['file']
     try:
-        global user_data
-        user_data = json.load(file)
-        save_user_data()
+        data = json.load(file)
+        global songs, artists, search_history
+        songs = data.get('songs', [])
+        artists = data.get('artists', {})
+        search_history = data.get('search_history', [])
+        save_json(SONGS_FILE, songs)
+        save_json(ARTISTS_FILE, artists)
+        save_json(SEARCH_HISTORY_FILE, search_history)
         return jsonify({'success': True})
     except Exception as e:
-        print(f"Import error: {e}")
+        logger.error(f"Import error: {str(e)}")
         return jsonify({'error': str(e)}), 400
 
 if __name__ == '__main__':
