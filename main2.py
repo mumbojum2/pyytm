@@ -33,58 +33,57 @@ search_history = []
 browser_json_content = ""
 user_authenticated = False
 
-def install_dependencies():
-    """Install required dependencies"""
-    print("🔍 Checking dependencies...")
-    
-    dependencies = ['yt-dlp', 'flask', 'flask-cors', 'requests', 'ytmusicapi', 'mutagen']
-    
-    for package in dependencies:
-        try:
-            if package == 'yt-dlp':
-                __import__('yt_dlp')
-            elif package == 'ytmusicapi':
-                __import__('ytmusicapi')
-            elif package == 'mutagen':
-                __import__('mutagen')
-            else:
-                __import__(package.replace('-', '_'))
-            print(f"✅ {package} installed")
-        except ImportError:
-            print(f"📦 Installing {package}...")
-            try:
-                subprocess.check_call(
-                    [sys.executable, "-m", "pip", "install", package],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-                print(f"✅ {package} installed successfully")
-            except Exception as e:
-                print(f"❌ Failed to install {package}: {e}")
-
-    # Upgrade yt-dlp to latest for bot detection fixes
-    print("🔄 Upgrading yt-dlp...")
-    try:
-        subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-        print("✅ yt-dlp upgraded")
-    except Exception as e:
-        print(f"⚠️ yt-dlp upgrade failed: {e}")
-
-    # Install ffmpeg
-#    print("🔧 Installing ffmpeg...")
+#def install_dependencies():
+#    """Install required dependencies"""
+#    print("🔍 Checking dependencies...")
+#    
+#    dependencies = ['yt-dlp', 'flask', 'flask-cors', 'requests', 'ytmusicapi', 'mutagen']
+#    
+#    for package in dependencies:
+#        try:
+#            if package == 'yt-dlp':
+#                __import__('yt_dlp')
+#            elif package == 'ytmusicapi':
+#                __import__('ytmusicapi')
+#            elif package == 'mutagen':
+#                __import__('mutagen')
+#            else:
+#                __import__(package.replace('-', '_'))
+#            print(f"✅ {package} installed")
+#        except ImportError:
+#            print(f"📦 Installing {package}...")
+#            try:
+#                subprocess.check_call(
+#                    [sys.executable, "-m", "pip", "install", package],
+#                    stdout=subprocess.DEVNULL,
+#                    stderr=subprocess.DEVNULL
+#                )
+#                print(f"✅ {package} installed successfully")
+#            except Exception as e:
+#                print(f"❌ Failed to install {package}: {e}")
+#
+#    # Upgrade yt-dlp to latest for bot detection fixes
+#    print("🔄 Upgrading yt-dlp...")
 #    try:
-#        subprocess.run(['apt-get', 'update'], check=False, capture_output=True)
-#        subprocess.run(['apt-get', 'install', '-y', 'ffmpeg'], check=False, capture_output=True)
-#        print("✅ ffmpeg installed")
+#        subprocess.check_call(
+#            [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"],
+#            stdout=subprocess.DEVNULL,
+#            stderr=subprocess.DEVNULL
+#        )
+#        print("✅ yt-dlp upgraded")
 #    except Exception as e:
-#        print(f"⚠️ ffmpeg issues: {e}")
-
-install_dependencies()
-
+#        print(f"⚠️ yt-dlp upgrade failed: {e}")
+#
+#    # Install ffmpeg
+##    print("🔧 Installing ffmpeg...")
+##    try:
+##        subprocess.run(['apt-get', 'update'], check=False, capture_output=True)
+##        subprocess.run(['apt-get', 'install', '-y', 'ffmpeg'], check=False, capture_output=True)
+##        print("✅ ffmpeg installed")
+##    except Exception as e:
+##        print(f"⚠️ ffmpeg issues: {e}")
+#
+#install_dependencies()
 # Load user data at startup
 def load_user_data():
     """Load user data from files"""
@@ -843,4 +842,5 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
