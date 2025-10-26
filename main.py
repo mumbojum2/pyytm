@@ -742,10 +742,16 @@ def download():
         # Download directly as MP3 with proper filename
         output_template = os.path.join('downloads', f'{filename}.%(ext)s')  # Use .%(ext)s for flexibility
         
-        # Base command with bot bypass and format selection
+        # Base evasion options (always include)
+        evasion_opts = [
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.7390.123 Safari/537.36',  # Latest Chrome UA (Oct 2025)
+            '--referer', 'https://www.youtube.com/',  # Mimic browser referral
+        ]
+        
+        # Base command with format selection and evasion
         cmd = [
             sys.executable, '-m', 'yt_dlp',
-            '-f', 'bestaudio',  # NEW: Pick the first/best available audio format
+            '-f', 'bestaudio',  # Auto-pick best available audio format
             '-x', '--audio-format', 'mp3',
             '--audio-quality', '0',  # Best quality during conversion
             '--add-metadata',
@@ -754,113 +760,105 @@ def download():
             '--parse-metadata', 'uploader:%(artist)s',
             '-o', output_template,
             '--no-warnings',
-            '--sleep-interval', '5',  # Rate limit to avoid bans
+            '--sleep-interval', '5',  # Rate limit
             '--max-sleep-interval', '10',
-            '--extractor-args', 'youtube:player_client=ios',  # Bypass bot detection
-        ]
+            '--extractor-args', 'youtube:player_client=ios',  # iOS client bypass
+        ] + evasion_opts  # Add UA and referer
 
-        # Add cookies if file exists
-        if os.path.exists('cookies.txt'):
-            cmd.extend(['--cookies', 'cookies.txt'])
-            print("🔑 Using cookies for auth")
-        else:
-            print("⚠️ No cookies.txt found; proceeding without auth")
-
-        cmd.append(url)
-
-        print(f"📥 Running download command...")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        attempts = 0
+        max_attempts = 2  # Cookies -> No cookies
+        final_error = None
         
-        if result.returncode == 0:
-            print(f"✅ Download completed for: {title}")
-            time.sleep(1)
-            
-            # Find the downloaded file (should be .mp3, but check others)
-            possible_files = [f"{filename}.mp3", f"{filename}.m4a", f"{filename}.webm"]
-            filepath = None
-            for possible in possible_files:
-                test_path = os.path.join('downloads', possible)
-                if os.path.exists(test_path):
-                    filepath = test_path
-                    print(f"📁 Found file: {possible}")
-                    break
-            
-            if filepath:
-                # If not already MP3, convert with ffmpeg (quick fallback)
-                if not filepath.endswith('.mp3'):
-                    mp3_path = filepath.replace(filepath.split('.')[-1], 'mp3')
-                    ffmpeg_cmd = ['ffmpeg', '-y', '-i', filepath, '-codec:a', 'libmp3lame', '-qscale:a', '0', mp3_path]
-                    subprocess.run(ffmpeg_cmd, capture_output=True)
-                    if os.path.exists(mp3_path):
-                        filepath = mp3_path
-                        print(f"🔄 Converted to MP3: {mp3_path}")
-                
-                # Enhance metadata
-                add_metadata_to_file(filepath, title, artist, album, thumbnail)
-                
-                song_info = {
-                    'id': len(songs_db) + 1,
-                    'title': title,
-                    'artist': artist,
-                    'album': album,
-                    'filename': os.path.basename(filepath),
-                    'filepath': filepath,
-                    'downloadedAt': time.strftime('%Y-%m-%d %H:%M:%S')
-                }
-                songs_db.append(song_info)
-                
-                # Update artists
-                if artist in artists_db:
-                    artists_db[artist] += 1
-                else:
-                    artists_db[artist] = 1
-                
-                save_user_data()
-                
-                # Return the file for immediate download
-                download_name = f"{safe_artist} - {safe_title}.mp3"
-                return send_file(filepath, as_attachment=True, download_name=download_name)
+        while attempts < max_attempts:
+            # Add cookies if file exists and first attempt
+            if attempts == 0 and os.path.exists('cookies.txt'):
+                cmd_with_cookies = cmd + ['--cookies', 'cookies.txt']
+                print("🔑 Using cookies for auth")
+                current_cmd = cmd_with_cookies
             else:
-                print(f"❌ Downloaded file not found for: {title}")
-                return jsonify({'error': 'Downloaded file not found'}), 500
-        else:
-            error_msg = result.stderr
-            print(f"❌ Download command failed: {error_msg}")
-            # Fallback without cookies if bot error and cookies were used
-            if "Sign in to confirm" in error_msg and os.path.exists('cookies.txt'):
-                print("🔄 Retrying without cookies...")
-                cmd_without_cookies = [c for c in cmd if c not in ['--cookies', 'cookies.txt']]
-                result = subprocess.run(cmd_without_cookies, capture_output=True, text=True, timeout=300)
-                if result.returncode == 0:
-                    # Recheck for file after fallback (repeat file finding logic)
-                    possible_files = [f"{filename}.mp3", f"{filename}.m4a", f"{filename}.webm"]
-                    filepath = None
-                    for possible in possible_files:
-                        test_path = os.path.join('downloads', possible)
-                        if os.path.exists(test_path):
-                            filepath = test_path
-                            break
-                    if filepath:
-                        # Repeat metadata and saving logic...
-                        add_metadata_to_file(filepath, title, artist, album, thumbnail)
-                        song_info = {
-                            'id': len(songs_db) + 1,
-                            'title': title,
-                            'artist': artist,
-                            'album': album,
-                            'filename': os.path.basename(filepath),
-                            'filepath': filepath,
-                            'downloadedAt': time.strftime('%Y-%m-%d %H:%M:%S')
-                        }
-                        songs_db.append(song_info)
-                        if artist in artists_db:
-                            artists_db[artist] += 1
+                print(f"⚠️ Attempt {attempts + 1}: No cookies")
+                current_cmd = cmd[:]  # Copy base without cookies
+                
+            print(f"📥 Running download command (attempt {attempts + 1})...")
+            result = subprocess.run(current_cmd, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode == 0:
+                print(f"✅ Download completed for: {title}")
+                time.sleep(2)  # Longer sleep for processing
+                
+                # Find the downloaded file
+                possible_files = [f"{filename}.mp3", f"{filename}.m4a", f"{filename}.webm"]
+                filepath = None
+                for possible in possible_files:
+                    test_path = os.path.join('downloads', possible)
+                    if os.path.exists(test_path):
+                        filepath = test_path
+                        print(f"📁 Found file: {possible}")
+                        break
+                
+                if filepath:
+                    # Ensure MP3 via FFmpeg if needed
+                    if not filepath.endswith('.mp3'):
+                        mp3_path = filepath.rsplit('.', 1)[0] + '.mp3'
+                        ffmpeg_cmd = ['ffmpeg', '-y', '-i', filepath, '-codec:a', 'libmp3lame', '-qscale:a', '0', mp3_path]
+                        ff_result = subprocess.run(ffmpeg_cmd, capture_output=True)
+                        if ff_result.returncode == 0 and os.path.exists(mp3_path):
+                            filepath = mp3_path
+                            os.remove(filepath)  # Clean up original
+                            print(f"🔄 Converted to MP3: {mp3_path}")
                         else:
-                            artists_db[artist] = 1
-                        save_user_data()
-                        download_name = f"{safe_artist} - {safe_title}.mp3"
-                        return send_file(filepath, as_attachment=True, download_name=download_name)
-            return jsonify({'error': f'Download failed: {error_msg[:200]}...'}), 500
+                            print(f"⚠️ FFmpeg conversion failed: {ff_result.stderr}")
+                    
+                    # Add metadata
+                    add_metadata_to_file(filepath, title, artist, album, thumbnail)
+                    
+                    # Save to DB
+                    song_info = {
+                        'id': len(songs_db) + 1,
+                        'title': title,
+                        'artist': artist,
+                        'album': album,
+                        'filename': os.path.basename(filepath),
+                        'filepath': filepath,
+                        'downloadedAt': time.strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                    songs_db.append(song_info)
+                    
+                    if artist in artists_db:
+                        artists_db[artist] += 1
+                    else:
+                        artists_db[artist] = 1
+                    
+                    save_user_data()
+                    
+                    # Send file
+                    download_name = f"{safe_artist} - {safe_title}.mp3"
+                    return send_file(filepath, as_attachment=True, download_name=download_name)
+                
+                # If no file but success, rare—retry
+                attempts += 1
+                continue
+            else:
+                error_msg = result.stderr
+                print(f"❌ Attempt {attempts + 1} failed: {error_msg[:200]}")
+                final_error = error_msg
+                if "Sign in to confirm" in error_msg:
+                    attempts += 1  # Proceed to fallback
+                else:
+                    break  # Other error, stop
+        
+        # All attempts failed
+        tips = []
+        if "Sign in to confirm" in final_error:
+            tips = [
+                "1. Upload a fresh 'cookies.txt' file (export from your logged-in browser using the 'cookies.txt' extension).",
+                "2. Try a VPN to change your server's IP (common on shared hosts like Koyeb).",
+                "3. Wait 2-3 days and retry—YouTube flags IPs temporarily."
+            ]
+        return jsonify({
+            'error': f'Download failed after retries: {final_error[:150]}...',
+            'tips': tips
+        }), 500
             
     except Exception as e:
         print(f"❌ Download error details: {e}")
@@ -926,5 +924,6 @@ def format_views(views):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
