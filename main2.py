@@ -759,9 +759,23 @@ def debug_suggestions():
         'suggestions_type': str(type(suggestions))
     })
 
+@app.route('/api/library')
+def get_library():
+    """Get user library data"""
+    return jsonify({
+        'library': {
+            'songs': [],
+            'artists': [],
+            'albums': [], 
+            'playlists': []
+        },
+        'authenticated': user_authenticated
+    })
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
 
