@@ -76,75 +76,58 @@ def sanitize_filename(filename):
     return re.sub(r'[<>:"/\\|?*]', '', filename)
 
 def get_youtube_suggestions(query):
-    """Get YouTube search suggestions - FIXED VERSION"""
+    """Get YouTube search suggestions - USING FIREFOX CLIENT (WORKING VERSION)"""
     if not query or len(query) < 2:
         return []
 
     try:
         url = "https://suggestqueries.google.com/complete/search"
         params = {
-            "client": "youtube",
-            "hl": "en", 
-            "ds": "yt",
-            "q": query
+            'client': 'firefox',  # Changed from 'youtube' to 'firefox'
+            'q': query,
+            'hl': 'en',
         }
-        
+
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
-        
-        response = requests.get(url, params=params, headers=headers, timeout=3)
+
+        response = requests.get(url, params=params, headers=headers, timeout=5)
         
         if response.status_code == 200:
-            content = response.text
+            # Parse the JSON response
+            data = response.json()
             
-            # Parse the JSONP response
-            start = content.find('[')
-            end = content.rfind(']') + 1
-            
-            if start != -1 and end != -1:
-                json_str = content[start:end]
-                data = json.loads(json_str)
+            # Firefox client returns: [query, [suggestions], ...]
+            if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
+                suggestions = data[1][:5]  # Get first 5 suggestions
+                print(f"✅ Got {len(suggestions)} clean suggestions for: {query}")
+                print(f"📝 Suggestions: {suggestions}")
+                return suggestions
+            else:
+                print(f"❌ Unexpected response format: {data}")
+                return []
                 
-                if len(data) > 1 and isinstance(data[1], list):
-                    raw_suggestions = data[1][:8]
-                    
-                    # BETTER cleaning - less aggressive
-                    cleaned_suggestions = []
-                    for suggestion in raw_suggestions:
-                        if suggestion and isinstance(suggestion, str):
-                            # Remove trailing numbers and garbage but be more lenient
-                            clean_suggestion = re.sub(r'\s*\d{8,}$', '', suggestion)  # Remove trailing 8+ digit numbers
-                            clean_suggestion = re.sub(r'[<>:"/\\|?*]+$', '', clean_suggestion)  # Remove trailing invalid chars
-                            clean_suggestion = clean_suggestion.strip()
-                            
-                            # More lenient filtering
-                            if (clean_suggestion and 
-                                len(clean_suggestion) >= len(query) and  # Changed to >= instead of >
-                                len(clean_suggestion) < 60 and
-                                not clean_suggestion.endswith('...') and
-                                clean_suggestion.lower() != query.lower()):  # Don't return exact same as query
-                                cleaned_suggestions.append(clean_suggestion)
-                    
-                    print(f"✅ Got {len(cleaned_suggestions)} cleaned suggestions for: {query}")
-                    if cleaned_suggestions:
-                        print(f"📝 Cleaned suggestions: {cleaned_suggestions}")
-                    return cleaned_suggestions
-                    
+    except requests.exceptions.Timeout:
+        print("⚠️ Suggestions request timed out")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Network error: {e}")
+    except json.JSONDecodeError as e:
+        print(f"❌ JSON decode error: {e}")
+        print(f"📄 Response text: {response.text[:200]}...")
     except Exception as e:
-        print(f"Suggestions error: {e}")
+        print(f"💥 Unexpected error: {e}")
     
-    # Fallback if anything fails - return basic suggestions
+    # Fallback if anything fails
     fallback_suggestions = [
         f"{query} songs",
-        f"{query} lyrics", 
+        f"{query} lyrics",
         f"{query} official video",
         f"{query} album",
         f"{query} music video"
     ]
     print(f"🔄 Using fallback suggestions: {fallback_suggestions}")
     return fallback_suggestions
-
 def parse_view_count(view_str):
     """Parse view count string into integer - SIMPLIFIED"""
     if not view_str:
@@ -782,6 +765,7 @@ def debug_suggestions():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
 
