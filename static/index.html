@@ -132,6 +132,47 @@ useEffect(() => {
     };
 }, [searchQuery]);
 
+// OPTIMIZED: Fast suggestions with cancellation
+const fetchSuggestions = async (currentQuery) => {
+    if (!currentQuery || !currentQuery.trim() || currentQuery.length < 2) {
+        setSuggestions([]);
+        setShowSuggestions(false);
+        return;
+    }
+
+    // Cancel any previous request
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+    }
+    
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
+
+    try {
+        const response = await fetch(`${API_BASE}/api/suggestions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: currentQuery }),
+            signal: abortControllerRef.current.signal
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Only update state if this is still the current query
+            if (currentQuery === searchQuery) {
+                const newSuggestions = (data.suggestions || []).slice(0, 5);
+                setSuggestions(newSuggestions);
+                setShowSuggestions(newSuggestions.length > 0);
+            }
+        }
+    } catch (error) {
+        if (error.name !== 'AbortError') {
+            console.error('Suggestions error:', error);
+        }
+    }
+};
+
             const loadHomeData = async () => {
                 try {
                     const response = await fetch(`${API_BASE}/api/home`);
@@ -194,65 +235,7 @@ useEffect(() => {
                     setUserAuthenticated(true);
                 }
             };
-
-            // FIXED: Simple suggestions without aggressive filtering
-            // DEBUG VERSION - Replace your fetchSuggestions function with this
-// FINAL CLEANED VERSION - Replace your fetchSuggestions function
-const fetchSuggestions = async () => {
-    if (!searchQuery.trim() || searchQuery.length < 2) {
-        setSuggestions([]);
-        setShowSuggestions(false);
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_BASE}/api/suggestions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: searchQuery })
-        });
-
-        if (response.ok) {
-            const data = await response.json();
             
-            // Final cleanup on frontend just in case
-            const cleanSuggestions = (data.suggestions || [])
-                .filter(suggestion => {
-                    if (!suggestion || typeof suggestion !== 'string') return false;
-                    
-                    const clean = suggestion.trim();
-                    
-                    // Remove any remaining garbage
-                    if (clean.length < 2 || clean.length > 50) return false;
-                    if (/^\d+$/.test(clean)) return false; // Only numbers
-                    if (clean === searchQuery) return false; // Same as query
-                    
-                    return true;
-                })
-                .map(suggestion => {
-                    // Final cleanup - remove any trailing numbers or weird chars
-                    return suggestion
-                        .replace(/\s+\d{6,}$/g, '') // Remove trailing 6+ digit numbers
-                        .replace(/[<>:"/\\|?*]+$/g, '') // Remove trailing invalid filename chars
-                        .replace(/\s+\.{3,}$/g, '') // Remove trailing ellipsis
-                        .trim();
-                })
-                .filter(suggestion => suggestion.length > 0)
-                .slice(0, 5);
-            
-            console.log('🎯 Cleaned suggestions:', cleanSuggestions);
-            setSuggestions(cleanSuggestions);
-            setShowSuggestions(cleanSuggestions.length > 0);
-        } else {
-            setSuggestions([]);
-            setShowSuggestions(false);
-        }
-    } catch (error) {
-        console.error('Suggestions error:', error);
-        setSuggestions([]);
-        setShowSuggestions(false);
-    }
-};
             const handleSearch = async (query = searchQuery) => {
                 const searchTerm = query.trim();
                 if (!searchTerm) {
@@ -961,6 +944,7 @@ const fetchSuggestions = async () => {
     </script>
 </body>
 </html>
+
 
 
 
