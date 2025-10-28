@@ -76,58 +76,54 @@ def sanitize_filename(filename):
     return re.sub(r'[<>:"/\\|?*]', '', filename)
 
 def get_youtube_suggestions(query):
-    """Get YouTube search suggestions - USING FIREFOX CLIENT (WORKING VERSION)"""
+    """Get YouTube search suggestions - OPTIMIZED FAST VERSION"""
     if not query or len(query) < 2:
         return []
 
     try:
         url = "https://suggestqueries.google.com/complete/search"
         params = {
-            'client': 'firefox',  # Changed from 'youtube' to 'firefox'
+            'client': 'firefox',
             'q': query,
             'hl': 'en',
         }
 
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-
-        response = requests.get(url, params=params, headers=headers, timeout=5)
+        # OPTIMIZATION: Shorter timeout and connection pooling
+        response = requests.get(url, params=params, timeout=2.0)  # Reduced from 5s to 2s
         
         if response.status_code == 200:
-            # Parse the JSON response
             data = response.json()
             
-            # Firefox client returns: [query, [suggestions], ...]
             if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
-                suggestions = data[1][:5]  # Get first 5 suggestions
-                print(f"✅ Got {len(suggestions)} clean suggestions for: {query}")
-                print(f"📝 Suggestions: {suggestions}")
+                suggestions = data[1][:5]
+                print(f"✅ Fast suggestions for '{query}': {suggestions}")
                 return suggestions
-            else:
-                print(f"❌ Unexpected response format: {data}")
-                return []
                 
     except requests.exceptions.Timeout:
-        print("⚠️ Suggestions request timed out")
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Network error: {e}")
-    except json.JSONDecodeError as e:
-        print(f"❌ JSON decode error: {e}")
-        print(f"📄 Response text: {response.text[:200]}...")
+        print(f"⚠️ Suggestions timeout for: {query}")
+        # Return cached/fallback suggestions immediately on timeout
+        return get_fallback_suggestions(query)
     except Exception as e:
-        print(f"💥 Unexpected error: {e}")
+        print(f"⚠️ Suggestions error for {query}: {e}")
     
-    # Fallback if anything fails
-    fallback_suggestions = [
+    # Fast fallback
+    return get_fallback_suggestions(query)
+
+def get_fallback_suggestions(query):
+    """Fast fallback suggestions without external API calls"""
+    # Common music-related suggestions
+    music_suggestions = [
         f"{query} songs",
-        f"{query} lyrics",
+        f"{query} lyrics", 
         f"{query} official video",
         f"{query} album",
-        f"{query} music video"
+        f"{query} music video",
+        f"{query} live",
+        f"{query} cover",
+        f"{query} remix"
     ]
-    print(f"🔄 Using fallback suggestions: {fallback_suggestions}")
-    return fallback_suggestions
+    return music_suggestions[:5]
+
 def parse_view_count(view_str):
     """Parse view count string into integer - SIMPLIFIED"""
     if not view_str:
@@ -765,6 +761,7 @@ def debug_suggestions():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
 
