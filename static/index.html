@@ -727,361 +727,383 @@ const handleImportData = async (event) => {
                         </div>
                     </div>
 
-                    {/* Main Content */}
-                    <div className="max-w-7xl mx-auto px-6 py-8">
-                        {/* Home Page */}
-                        {activeTab === 'home' && (
-                            <div className="fade-in">
-                                <div className="text-center mb-12">
-                                    <h1 className="text-4xl font-bold text-white mb-4">
-                                        {userAuthenticated ? 'Welcome Back!' : 'Welcome to MusicGrab Pro'}
-                                    </h1>
-                                    <p className="text-white/80 text-xl">
-                                        {userAuthenticated 
-                                            ? 'Your personalized music experience awaits' 
-                                            : 'Discover and download your favorite music'
-                                        }
-                                    </p>
-                                </div>
-
-                                {/* Featured Sections */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-                                    {homeData.featured.map((item, index) => (
-                                        <div key={item.id} className={`bg-gradient-to-br ${item.color} rounded-2xl p-6 text-white hover-lift cursor-pointer`}>
-                                            <div className="text-3xl mb-4">
-                                                <i className={item.icon}></i>
-                                            </div>
-                                            <h3 className="font-bold text-lg mb-2">{item.title}</h3>
-                                            <p className="text-white/80 text-sm">{item.subtitle}</p>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Recommendations */}
-                                <div className="mb-8">
-                                    <h2 className="text-2xl font-bold text-white mb-6">
-                                        {userAuthenticated ? 'Recommended For You' : 'Popular Right Now'}
-                                    </h2>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                                        {homeData.recommendations.map((rec, index) => (
-                                            <div key={rec.id} className="bg-white/10 rounded-2xl p-4 hover-lift cursor-pointer backdrop-blur-sm">
-                                                <div className="relative mb-3">
-                                                    <img 
-                                                        src={rec.thumbnail} 
-                                                        alt={rec.title}
-                                                        className="w-full aspect-square object-cover rounded-xl"
-                                                    />
-                                                    <div className="play-button-overlay">
-                                                        <i className="fas fa-play text-white text-2xl"></i>
-                                                    </div>
-                                                </div>
-                                                <h3 className="font-semibold text-white text-sm mb-1 truncate">{rec.title}</h3>
-                                                <p className="text-white/70 text-xs truncate">{rec.artist}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Search Results */}
-                        {activeTab === 'search' && (
-                            <div className="fade-in">
-                                {loading ? (
-                                    <div className="text-center py-16">
-                                        <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
-                                        <h3 className="text-xl font-semibold text-white mb-2">Searching...</h3>
-                                        <p className="text-white/70">Finding the best results for "{searchQuery}"</p>
-                                    </div>
-                                ) : (
-                                    <div>
-                                        <div className="mb-6">
-                                            <h1 className="text-2xl font-bold text-white">
-                                                Search Results for: "{searchQuery}"
-                                            </h1>
-                                        </div>
-
-                                       {/* Your Artists Page */}
-{activeTab === 'artists' && (
-    <div className="fade-in">
-        <h2 className="text-2xl font-bold text-white mb-6">Your Artists</h2>
-        {Object.keys(artists).length === 0 ? (
-            <div className="text-center py-16">
-                <i className="fas fa-users text-white/40 text-6xl mb-4"></i>
-                <h3 className="text-xl font-semibold text-white mb-2">No artists yet</h3>
-                <p className="text-white/70">Artists from downloaded songs will appear here</p>
+{/* Main Content */}
+<div className="max-w-7xl mx-auto px-6 py-8">
+    {/* Home Page */}
+    {activeTab === 'home' && (
+        <div className="fade-in">
+            <div className="text-center mb-12">
+                <h1 className="text-4xl font-bold text-white mb-4">
+                    {userAuthenticated ? 'Welcome Back!' : 'Welcome to MusicGrab Pro'}
+                </h1>
+                <p className="text-white/80 text-xl">
+                    {userAuthenticated 
+                        ? 'Your personalized music experience awaits' 
+                        : 'Discover and download your favorite music'
+                    }
+                </p>
             </div>
-        ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {Object.entries(artists).map(([artistName, songCount]) => (
-                    <div key={artistName} className="bg-white/10 rounded-2xl p-4 text-center hover-lift cursor-pointer backdrop-blur-sm">
-                        <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
-                            <i className="fas fa-user text-white/60 text-2xl"></i>
+
+            {/* Featured Sections */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+                {homeData.featured.map((item, index) => (
+                    <div key={item.id} className={`bg-gradient-to-br ${item.color} rounded-2xl p-6 text-white hover-lift cursor-pointer`}>
+                        <div className="text-3xl mb-4">
+                            <i className={item.icon}></i>
                         </div>
-                        <h3 className="font-semibold text-white text-sm mb-1 truncate">{artistName}</h3>
-                        <p className="text-white/70 text-xs">{songCount} {songCount === 1 ? 'song' : 'songs'}</p>
+                        <h3 className="font-bold text-lg mb-2">{item.title}</h3>
+                        <p className="text-white/80 text-sm">{item.subtitle}</p>
                     </div>
                 ))}
             </div>
-        )}
-    </div>
-)}
 
-                                        {/* Albums */}
-                                        {searchResults.albums && searchResults.albums.length > 0 && (
-                                            <div className="mb-8">
-                                                <h2 className="text-2xl font-bold text-white mb-4">Albums</h2>
-                                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                                    {searchResults.albums.map((album, index) => (
-                                                        <div key={album.id} className="bg-white/10 rounded-2xl p-4 hover-lift cursor-pointer backdrop-blur-sm">
-                                                            <img 
-                                                                src={album.thumbnail} 
-                                                                alt={album.title}
-                                                                className="w-full aspect-square object-cover rounded-xl mb-3"
-                                                            />
-                                                            <h3 className="font-semibold text-white text-sm mb-1 truncate">{album.title}</h3>
-                                                            <p className="text-white/70 text-xs truncate">{album.artist}</p>
-                                                            {album.year && <p className="text-white/60 text-xs">{album.year}</p>}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
+            {/* Recommendations */}
+            <div className="mb-8">
+                <h2 className="text-2xl font-bold text-white mb-6">
+                    {userAuthenticated ? 'Recommended For You' : 'Popular Right Now'}
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    {homeData.recommendations.map((rec, index) => (
+                        <div key={rec.id} className="bg-white/10 rounded-2xl p-4 hover-lift cursor-pointer backdrop-blur-sm">
+                            <div className="relative mb-3">
+                                <img 
+                                    src={rec.thumbnail} 
+                                    alt={rec.title}
+                                    className="w-full aspect-square object-cover rounded-xl"
+                                />
+                                <div className="play-button-overlay">
+                                    <i className="fas fa-play text-white text-2xl"></i>
+                                </div>
+                            </div>
+                            <h3 className="font-semibold text-white text-sm mb-1 truncate">{rec.title}</h3>
+                            <p className="text-white/70 text-xs truncate">{rec.artist}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    )}
 
-                                        {/* Settings Page */}
-{activeTab === 'settings' && (
-    <div className="fade-in max-w-2xl mx-auto">
-        <h2 className="text-2xl font-bold text-white mb-6">Settings</h2>
-        
-        {/* Authentication Section */}
-        <div className="bg-white/10 rounded-2xl p-6 mb-6 backdrop-blur-sm">
-            <h3 className="text-xl font-semibold text-white mb-4">Authentication</h3>
-            {userAuthenticated ? (
-                <div className="flex items-center gap-3 text-green-300">
-                    <i className="fas fa-check-circle text-xl"></i>
-                    <p>Connected to YouTube Music</p>
+    {/* Search Results */}
+    {activeTab === 'search' && (
+        <div className="fade-in">
+            {loading ? (
+                <div className="text-center py-16">
+                    <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <h3 className="text-xl font-semibold text-white mb-2">Searching...</h3>
+                    <p className="text-white/70">Finding the best results for "{searchQuery}"</p>
                 </div>
             ) : (
                 <div>
-                    <p className="text-white/70 mb-4">Paste your browser.json content to connect to YouTube Music</p>
-                    <textarea
-                        value={browserJson}
-                        onChange={(e) => setBrowserJson(e.target.value)}
-                        placeholder="Paste browser.json content here..."
-                        className="w-full h-32 p-4 rounded-lg bg-white/20 text-white placeholder-white/50 mb-4 resize-none"
-                    ></textarea>
-                    <button
-                        onClick={handleAuthenticate}
-                        disabled={loading}
-                        className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all disabled:opacity-50"
-                    >
-                        {loading ? (
-                            <>
-                                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full inline-block mr-2"></div>
-                                Connecting...
-                            </>
-                        ) : (
-                            <>
-                                <i className="fas fa-link mr-2"></i>
-                                Connect
-                            </>
-                        )}
-                    </button>
+                    <div className="mb-6">
+                        <h1 className="text-2xl font-bold text-white">
+                            Search Results for: "{searchQuery}"
+                        </h1>
+                    </div>
+
+                    {/* Artists */}
+                    {searchResults.artists && searchResults.artists.length > 0 && (
+                        <div className="mb-8">
+                            <h2 className="text-2xl font-bold text-white mb-4">Artists</h2>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {searchResults.artists.map((artist, index) => (
+                                    <div key={artist.id} className="bg-white/10 rounded-2xl p-4 text-center hover-lift cursor-pointer backdrop-blur-sm" onClick={() => handleArtistClick(artist.id)}>
+                                        <img 
+                                            src={artist.thumbnail} 
+                                            alt={artist.name}
+                                            className="w-20 h-20 rounded-full mx-auto mb-3 object-cover"
+                                        />
+                                        <h3 className="font-semibold text-white text-sm">{artist.name}</h3>
+                                        <p className="text-white/70 text-xs">Artist</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Albums */}
+                    {searchResults.albums && searchResults.albums.length > 0 && (
+                        <div className="mb-8">
+                            <h2 className="text-2xl font-bold text-white mb-4">Albums</h2>
+                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                                {searchResults.albums.map((album, index) => (
+                                    <div key={album.id} className="bg-white/10 rounded-2xl p-4 hover-lift cursor-pointer backdrop-blur-sm">
+                                        <img 
+                                            src={album.thumbnail} 
+                                            alt={album.title}
+                                            className="w-full aspect-square object-cover rounded-xl mb-3"
+                                        />
+                                        <h3 className="font-semibold text-white text-sm mb-1 truncate">{album.title}</h3>
+                                        <p className="text-white/70 text-xs truncate">{album.artist}</p>
+                                        {album.year && <p className="text-white/60 text-xs">{album.year}</p>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Songs */}
+                    {searchResults.songs && searchResults.songs.length > 0 && (
+                        <div>
+                            <h2 className="text-2xl font-bold text-white mb-4">Songs</h2>
+                            <div className="space-y-2">
+                                {searchResults.songs.map((song, index) => (
+                                    <div key={`${song.id}-${index}`} className="bg-white/10 rounded-xl p-4 hover:bg-white/20 transition-all backdrop-blur-sm">
+                                        <div className="flex items-center gap-4">
+                                            <div className="relative flex-shrink-0">
+                                                <img 
+                                                    src={song.thumbnail} 
+                                                    alt={song.title}
+                                                    className="w-12 h-12 rounded-lg object-cover"
+                                                />
+                                                <button
+                                                    onClick={() => handlePlaySong(song)}
+                                                    className="play-button-overlay"
+                                                    title="Play song"
+                                                >
+                                                    <i className="fas fa-play text-white text-sm"></i>
+                                                </button>
+                                            </div>
+                                            
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center mb-1">
+                                                    <h3 className="font-semibold text-white text-base truncate">
+                                                        {song.title}
+                                                    </h3>
+                                                    {song.is_explicit && (
+                                                        <div className="explicit-badge" title="Explicit">
+                                                            E
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                
+                                                <div className="text-sm text-white/70 mb-1">
+                                                    <span className="font-medium">{song.artist}</span>
+                                                    {song.album && <span> • {song.album}</span>}
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-3 text-xs text-white/60 flex-wrap">
+                                                    <span>Duration: {song.duration}</span>
+                                                    <span>•</span>
+                                                    <span>{song.views || 'No views'}</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                <button
+                                                    onClick={() => handlePlaySong(song)}
+                                                    className="bg-white/20 text-white p-2 rounded-lg hover:bg-white/30 transition-all flex items-center justify-center"
+                                                    title="Play"
+                                                    style={{ width: '40px', height: '40px' }}
+                                                >
+                                                    <i className="fas fa-play text-sm"></i>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDownload(song)}
+                                                    disabled={downloading === song.id}
+                                                    className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                                                        downloading === song.id 
+                                                            ? 'bg-green-500/20 text-green-300 cursor-not-allowed' 
+                                                            : 'bg-white/20 text-white hover:bg-white/30'
+                                                    }`}
+                                                    style={{ height: '40px' }}
+                                                >
+                                                    {downloading === song.id ? (
+                                                        <>
+                                                            <div className="animate-spin w-4 h-4 border-2 border-green-300 border-t-transparent rounded-full"></div>
+                                                            <span className="hidden sm:inline">Downloading...</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <i className="fas fa-download"></i>
+                                                            <span className="hidden sm:inline">Download</span>
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* No results */}
+                    {(!searchResults.songs || searchResults.songs.length === 0) && 
+                     (!searchResults.artists || searchResults.artists.length === 0) && 
+                     (!searchResults.albums || searchResults.albums.length === 0) && (
+                        <div className="text-center py-16">
+                            <i className="fas fa-search text-white/40 text-6xl mb-4"></i>
+                            <h3 className="text-xl font-semibold text-white mb-2">No results found</h3>
+                            <p className="text-white/70">Try different keywords or check your spelling</p>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
+    )}
 
-        {/* Data Management Section */}
-        <div className="bg-white/10 rounded-2xl p-6 backdrop-blur-sm">
-            <h3 className="text-xl font-semibold text-white mb-4">Data Management</h3>
-            <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                <button
-                    onClick={handleExportData}
-                    className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all flex items-center justify-center"
-                >
-                    <i className="fas fa-download mr-2"></i>
-                    Export Data
-                </button>
-                <label className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all flex items-center justify-center cursor-pointer">
-                    <i className="fas fa-upload mr-2"></i>
-                    Import Data
-                    <input
-                        type="file"
-                        accept=".json"
-                        onChange={handleImportData}
-                        className="hidden"
-                    />
-                </label>
-            </div>
-            <p className="text-white/70 text-sm">Export or import your downloaded songs and artists data</p>
+    {/* Your Songs Page */}
+    {activeTab === 'songs' && (
+        <div className="fade-in">
+            <h2 className="text-2xl font-bold text-white mb-6">Your Downloaded Songs</h2>
+            {songs.length === 0 ? (
+                <div className="text-center py-16">
+                    <i className="fas fa-music text-white/40 text-6xl mb-4"></i>
+                    <h3 className="text-xl font-semibold text-white mb-2">No songs yet</h3>
+                    <p className="text-white/70">Downloaded songs will appear here</p>
+                </div>
+            ) : (
+                <div className="space-y-2">
+                    {songs.map(song => (
+                        <div key={song.id} className="bg-white/10 rounded-xl p-4 hover:bg-white/20 transition-all backdrop-blur-sm">
+                            <div className="flex items-center gap-4">
+                                <img 
+                                    src={song.thumbnail} 
+                                    alt={song.title}
+                                    className="w-12 h-12 rounded-lg object-cover"
+                                />
+                                <div className="flex-1">
+                                    <h3 className="font-semibold text-white text-lg">{song.title}</h3>
+                                    <div className="text-white/70 text-sm">
+                                        {song.artist} • {song.album} • Downloaded {song.downloaded_at}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => playDownloadedSong(song.id)}
+                                        className="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-all"
+                                    >
+                                        <i className="fas fa-play mr-2"></i>
+                                        Play
+                                    </button>
+                                    <button
+                                        onClick={() => downloadToComputer(song.id)}
+                                        className="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-all"
+                                    >
+                                        <i className="fas fa-download mr-2"></i>
+                                        Download
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    )}
+
+    {/* Your Artists Page */}
+    {activeTab === 'artists' && (
+        <div className="fade-in">
+            <h2 className="text-2xl font-bold text-white mb-6">Your Artists</h2>
+            {Object.keys(artists).length === 0 ? (
+                <div className="text-center py-16">
+                    <i className="fas fa-users text-white/40 text-6xl mb-4"></i>
+                    <h3 className="text-xl font-semibold text-white mb-2">No artists yet</h3>
+                    <p className="text-white/70">Artists from downloaded songs will appear here</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                    {Object.entries(artists).map(([artistName, songCount]) => (
+                        <div key={artistName} className="bg-white/10 rounded-2xl p-4 text-center hover-lift cursor-pointer backdrop-blur-sm">
+                            <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
+                                <i className="fas fa-user text-white/60 text-2xl"></i>
+                            </div>
+                            <h3 className="font-semibold text-white text-sm mb-1 truncate">{artistName}</h3>
+                            <p className="text-white/70 text-xs">{songCount} {songCount === 1 ? 'song' : 'songs'}</p>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    )}
+
+    {/* Settings Page */}
+    {activeTab === 'settings' && (
+        <div className="fade-in max-w-2xl mx-auto">
+            <h2 className="text-2xl font-bold text-white mb-6">Settings</h2>
             
-            {/* Stats */}
-            <div className="mt-6 pt-6 border-t border-white/20">
-                <h4 className="text-lg font-semibold text-white mb-3">Your Statistics</h4>
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white/10 rounded-lg p-4 text-center">
-                        <div className="text-2xl font-bold text-white mb-1">{songs.length}</div>
-                        <div className="text-white/70 text-sm">Downloaded Songs</div>
+            {/* Authentication Section */}
+            <div className="bg-white/10 rounded-2xl p-6 mb-6 backdrop-blur-sm">
+                <h3 className="text-xl font-semibold text-white mb-4">Authentication</h3>
+                {userAuthenticated ? (
+                    <div className="flex items-center gap-3 text-green-300">
+                        <i className="fas fa-check-circle text-xl"></i>
+                        <p>Connected to YouTube Music</p>
                     </div>
-                    <div className="bg-white/10 rounded-lg p-4 text-center">
-                        <div className="text-2xl font-bold text-white mb-1">{Object.keys(artists).length}</div>
-                        <div className="text-white/70 text-sm">Artists</div>
+                ) : (
+                    <div>
+                        <p className="text-white/70 mb-4">Paste your browser.json content to connect to YouTube Music</p>
+                        <textarea
+                            value={browserJson}
+                            onChange={(e) => setBrowserJson(e.target.value)}
+                            placeholder="Paste browser.json content here..."
+                            className="w-full h-32 p-4 rounded-lg bg-white/20 text-white placeholder-white/50 mb-4 resize-none"
+                        ></textarea>
+                        <button
+                            onClick={handleAuthenticate}
+                            disabled={loading}
+                            className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all disabled:opacity-50"
+                        >
+                            {loading ? (
+                                <>
+                                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full inline-block mr-2"></div>
+                                    Connecting...
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fas fa-link mr-2"></i>
+                                    Connect
+                                </>
+                            )}
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* Data Management Section */}
+            <div className="bg-white/10 rounded-2xl p-6 backdrop-blur-sm">
+                <h3 className="text-xl font-semibold text-white mb-4">Data Management</h3>
+                <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                    <button
+                        onClick={handleExportData}
+                        className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all flex items-center justify-center"
+                    >
+                        <i className="fas fa-download mr-2"></i>
+                        Export Data
+                    </button>
+                    <label className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all flex items-center justify-center cursor-pointer">
+                        <i className="fas fa-upload mr-2"></i>
+                        Import Data
+                        <input
+                            type="file"
+                            accept=".json"
+                            onChange={handleImportData}
+                            className="hidden"
+                        />
+                    </label>
+                </div>
+                <p className="text-white/70 text-sm">Export or import your downloaded songs and artists data</p>
+                
+                {/* Stats */}
+                <div className="mt-6 pt-6 border-t border-white/20">
+                    <h4 className="text-lg font-semibold text-white mb-3">Your Statistics</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white/10 rounded-lg p-4 text-center">
+                            <div className="text-2xl font-bold text-white mb-1">{songs.length}</div>
+                            <div className="text-white/70 text-sm">Downloaded Songs</div>
+                        </div>
+                        <div className="bg-white/10 rounded-lg p-4 text-center">
+                            <div className="text-2xl font-bold text-white mb-1">{Object.keys(artists).length}</div>
+                            <div className="text-white/70 text-sm">Artists</div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-)}
-
-                                        {/* Songs */}
-                                        {searchResults.songs && searchResults.songs.length > 0 && (
-                                            <div>
-                                                <h2 className="text-2xl font-bold text-white mb-4">Songs</h2>
-                                                <div className="space-y-2">
-                                                    {searchResults.songs.map((song, index) => (
-                                                        <div key={`${song.id}-${index}`} className="bg-white/10 rounded-xl p-4 hover:bg-white/20 transition-all backdrop-blur-sm">
-                                                            <div className="flex items-center gap-4">
-                                                                <div className="relative flex-shrink-0">
-                                                                    <img 
-                                                                        src={song.thumbnail} 
-                                                                        alt={song.title}
-                                                                        className="w-12 h-12 rounded-lg object-cover"
-                                                                    />
-                                                                    <button
-                                                                        onClick={() => handlePlaySong(song)}
-                                                                        className="play-button-overlay"
-                                                                        title="Play song"
-                                                                    >
-                                                                        <i className="fas fa-play text-white text-sm"></i>
-                                                                    </button>
-                                                                </div>
-                                                                
-                                                                <div className="flex-1 min-w-0">
-                                                                    <div className="flex items-center mb-1">
-                                                                        <h3 className="font-semibold text-white text-base truncate">
-                                                                            {song.title}
-                                                                        </h3>
-                                                                        {song.is_explicit && (
-                                                                            <div className="explicit-badge" title="Explicit">
-                                                                                E
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                    
-                                                                    <div className="text-sm text-white/70 mb-1">
-                                                                        <span className="font-medium">{song.artist}</span>
-                                                                        {song.album && <span> • {song.album}</span>}
-                                                                    </div>
-                                                                    
-                                                                    <div className="flex items-center gap-3 text-xs text-white/60 flex-wrap">
-                                                                        <span>Duration: {song.duration}</span>
-                                                                        <span>•</span>
-                                                                        <span>{song.views || 'No views'}</span>
-                                                                    </div>
-                                                                </div>
-                                                                
-                                                                <div className="flex items-center gap-2 flex-shrink-0">
-                                                                    <button
-                                                                        onClick={() => handlePlaySong(song)}
-                                                                        className="bg-white/20 text-white p-2 rounded-lg hover:bg-white/30 transition-all flex items-center justify-center"
-                                                                        title="Play"
-                                                                        style={{ width: '40px', height: '40px' }}
-                                                                    >
-                                                                        <i className="fas fa-play text-sm"></i>
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleDownload(song)}
-                                                                        disabled={downloading === song.id}
-                                                                        className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-                                                                            downloading === song.id 
-                                                                                ? 'bg-green-500/20 text-green-300 cursor-not-allowed' 
-                                                                                : 'bg-white/20 text-white hover:bg-white/30'
-                                                                        }`}
-                                                                        style={{ height: '40px' }}
-                                                                    >
-                                                                        {downloading === song.id ? (
-                                                                            <>
-                                                                                <div className="animate-spin w-4 h-4 border-2 border-green-300 border-t-transparent rounded-full"></div>
-                                                                                <span className="hidden sm:inline">Downloading...</span>
-                                                                            </>
-                                                                        ) : (
-                                                                            <>
-                                                                                <i className="fas fa-download"></i>
-                                                                                <span className="hidden sm:inline">Download</span>
-                                                                            </>
-                                                                        )}
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* No results */}
-                                        {(!searchResults.songs || searchResults.songs.length === 0) && 
-                                         (!searchResults.artists || searchResults.artists.length === 0) && 
-                                         (!searchResults.albums || searchResults.albums.length === 0) && (
-                                            <div className="text-center py-16">
-                                                <i className="fas fa-search text-white/40 text-6xl mb-4"></i>
-                                                <h3 className="text-xl font-semibold text-white mb-2">No results found</h3>
-                                                <p className="text-white/70">Try different keywords or check your spelling</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Your Songs Page */}
-                        {activeTab === 'songs' && (
-                            <div className="fade-in">
-                                <h2 className="text-2xl font-bold text-white mb-6">Your Downloaded Songs</h2>
-                                {songs.length === 0 ? (
-                                    <div className="text-center py-16">
-                                        <i className="fas fa-music text-white/40 text-6xl mb-4"></i>
-                                        <h3 className="text-xl font-semibold text-white mb-2">No songs yet</h3>
-                                        <p className="text-white/70">Downloaded songs will appear here</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {songs.map(song => (
-                                            <div key={song.id} className="bg-white/10 rounded-xl p-4 hover:bg-white/20 transition-all backdrop-blur-sm">
-                                                <div className="flex items-center gap-4">
-                                                    <img 
-                                                        src={song.thumbnail} 
-                                                        alt={song.title}
-                                                        className="w-12 h-12 rounded-lg object-cover"
-                                                    />
-                                                    <div className="flex-1">
-                                                        <h3 className="font-semibold text-white text-lg">{song.title}</h3>
-                                                        <div className="text-white/70 text-sm">
-                                                            {song.artist} • {song.album} • Downloaded {song.downloaded_at}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            onClick={() => playDownloadedSong(song.id)}
-                                                            className="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-all"
-                                                        >
-                                                            <i className="fas fa-play mr-2"></i>
-                                                            Play
-                                                        </button>
-                                                        <button
-                                                            onClick={() => downloadToComputer(song.id)}
-                                                            className="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-all"
-                                                        >
-                                                            <i className="fas fa-download mr-2"></i>
-                                                            Download
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+    )}
+</div>
                         )}
                     </div>
                 </div>
@@ -1092,6 +1114,7 @@ const handleImportData = async (event) => {
     </script>
 </body>
 </html>
+
 
 
 
