@@ -425,6 +425,63 @@ const fetchSuggestions = async (currentQuery) => {
                 }
             };
 
+            // Add these handler functions to your React component
+const handleExportData = async () => {
+    try {
+        const response = await fetch(`${API_BASE}/api/export-data`);
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `musicgrab_backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            showMessage('✅ Data exported successfully!', 'success');
+        } else {
+            throw new Error('Export failed');
+        }
+    } catch (error) {
+        console.error('Export error:', error);
+        showMessage('Failed to export data', 'error');
+    }
+};
+
+const handleImportData = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_BASE}/api/import-data`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+        if (response.ok && data.success) {
+            showMessage('✅ Data imported successfully!', 'success');
+            // Reload the data
+            await loadSongs();
+            await loadArtists();
+            await loadSearchHistory();
+        } else {
+            throw new Error(data.error || 'Import failed');
+        }
+    } catch (error) {
+        console.error('Import error:', error);
+        showMessage(`❌ ${error.message}`, 'error');
+    }
+    
+    // Reset the file input
+    event.target.value = '';
+};
+
             const handleAuthenticate = async () => {
                 if (!browserJson.trim()) {
                     showMessage('Please paste your browser.json content', 'error');
@@ -744,25 +801,31 @@ const fetchSuggestions = async (currentQuery) => {
                                             </h1>
                                         </div>
 
-                                        {/* Artists */}
-                                        {searchResults.artists && searchResults.artists.length > 0 && (
-                                            <div className="mb-8">
-                                                <h2 className="text-2xl font-bold text-white mb-4">Artists</h2>
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                    {searchResults.artists.map((artist, index) => (
-                                                        <div key={artist.id} className="bg-white/10 rounded-2xl p-4 text-center hover-lift cursor-pointer backdrop-blur-sm" onClick={() => handleArtistClick(artist.id)}>
-                                                            <img 
-                                                                src={artist.thumbnail} 
-                                                                alt={artist.name}
-                                                                className="w-20 h-20 rounded-full mx-auto mb-3 object-cover"
-                                                            />
-                                                            <h3 className="font-semibold text-white text-sm">{artist.name}</h3>
-                                                            <p className="text-white/70 text-xs">Artist</p>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
+                                       {/* Your Artists Page */}
+{activeTab === 'artists' && (
+    <div className="fade-in">
+        <h2 className="text-2xl font-bold text-white mb-6">Your Artists</h2>
+        {Object.keys(artists).length === 0 ? (
+            <div className="text-center py-16">
+                <i className="fas fa-users text-white/40 text-6xl mb-4"></i>
+                <h3 className="text-xl font-semibold text-white mb-2">No artists yet</h3>
+                <p className="text-white/70">Artists from downloaded songs will appear here</p>
+            </div>
+        ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                {Object.entries(artists).map(([artistName, songCount]) => (
+                    <div key={artistName} className="bg-white/10 rounded-2xl p-4 text-center hover-lift cursor-pointer backdrop-blur-sm">
+                        <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
+                            <i className="fas fa-user text-white/60 text-2xl"></i>
+                        </div>
+                        <h3 className="font-semibold text-white text-sm mb-1 truncate">{artistName}</h3>
+                        <p className="text-white/70 text-xs">{songCount} {songCount === 1 ? 'song' : 'songs'}</p>
+                    </div>
+                ))}
+            </div>
+        )}
+    </div>
+)}
 
                                         {/* Albums */}
                                         {searchResults.albums && searchResults.albums.length > 0 && (
@@ -784,6 +847,91 @@ const fetchSuggestions = async (currentQuery) => {
                                                 </div>
                                             </div>
                                         )}
+
+                                        {/* Settings Page */}
+{activeTab === 'settings' && (
+    <div className="fade-in max-w-2xl mx-auto">
+        <h2 className="text-2xl font-bold text-white mb-6">Settings</h2>
+        
+        {/* Authentication Section */}
+        <div className="bg-white/10 rounded-2xl p-6 mb-6 backdrop-blur-sm">
+            <h3 className="text-xl font-semibold text-white mb-4">Authentication</h3>
+            {userAuthenticated ? (
+                <div className="flex items-center gap-3 text-green-300">
+                    <i className="fas fa-check-circle text-xl"></i>
+                    <p>Connected to YouTube Music</p>
+                </div>
+            ) : (
+                <div>
+                    <p className="text-white/70 mb-4">Paste your browser.json content to connect to YouTube Music</p>
+                    <textarea
+                        value={browserJson}
+                        onChange={(e) => setBrowserJson(e.target.value)}
+                        placeholder="Paste browser.json content here..."
+                        className="w-full h-32 p-4 rounded-lg bg-white/20 text-white placeholder-white/50 mb-4 resize-none"
+                    ></textarea>
+                    <button
+                        onClick={handleAuthenticate}
+                        disabled={loading}
+                        className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all disabled:opacity-50"
+                    >
+                        {loading ? (
+                            <>
+                                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full inline-block mr-2"></div>
+                                Connecting...
+                            </>
+                        ) : (
+                            <>
+                                <i className="fas fa-link mr-2"></i>
+                                Connect
+                            </>
+                        )}
+                    </button>
+                </div>
+            )}
+        </div>
+
+        {/* Data Management Section */}
+        <div className="bg-white/10 rounded-2xl p-6 backdrop-blur-sm">
+            <h3 className="text-xl font-semibold text-white mb-4">Data Management</h3>
+            <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                <button
+                    onClick={handleExportData}
+                    className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all flex items-center justify-center"
+                >
+                    <i className="fas fa-download mr-2"></i>
+                    Export Data
+                </button>
+                <label className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all flex items-center justify-center cursor-pointer">
+                    <i className="fas fa-upload mr-2"></i>
+                    Import Data
+                    <input
+                        type="file"
+                        accept=".json"
+                        onChange={handleImportData}
+                        className="hidden"
+                    />
+                </label>
+            </div>
+            <p className="text-white/70 text-sm">Export or import your downloaded songs and artists data</p>
+            
+            {/* Stats */}
+            <div className="mt-6 pt-6 border-t border-white/20">
+                <h4 className="text-lg font-semibold text-white mb-3">Your Statistics</h4>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white/10 rounded-lg p-4 text-center">
+                        <div className="text-2xl font-bold text-white mb-1">{songs.length}</div>
+                        <div className="text-white/70 text-sm">Downloaded Songs</div>
+                    </div>
+                    <div className="bg-white/10 rounded-lg p-4 text-center">
+                        <div className="text-2xl font-bold text-white mb-1">{Object.keys(artists).length}</div>
+                        <div className="text-white/70 text-sm">Artists</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+)}
 
                                         {/* Songs */}
                                         {searchResults.songs && searchResults.songs.length > 0 && (
@@ -944,6 +1092,7 @@ const fetchSuggestions = async (currentQuery) => {
     </script>
 </body>
 </html>
+
 
 
 
