@@ -759,22 +759,145 @@ def debug_suggestions():
         'suggestions_type': str(type(suggestions))
     })
 
+# Add these routes to your main2.py file
+
+@app.route('/api/artist/<artist_id>')
+def get_artist(artist_id):
+    """Get artist details and songs"""
+    try:
+        from ytmusicapi import YTMusic
+        yt = YTMusic()
+        
+        # Get artist information
+        artist = yt.get_artist(artist_id)
+        
+        # Get artist's songs
+        artist_songs = yt.get_artist_albums(artist_id, params="Eg-KAQwIABAAGAEgACgAMAI%3D")
+        
+        return jsonify({
+            'artist': artist,
+            'songs': artist_songs
+        })
+    except Exception as e:
+        print(f"Artist error: {e}")
+        return jsonify({'error': 'Artist not found'}), 404
+
 @app.route('/api/library')
 def get_library():
     """Get user library data"""
-    return jsonify({
-        'library': {
-            'songs': [],
-            'artists': [],
-            'albums': [], 
-            'playlists': []
-        },
-        'authenticated': user_authenticated
-    })
+    try:
+        if not user_authenticated:
+            return jsonify({
+                'library': {
+                    'songs': [],
+                    'artists': [],
+                    'albums': [],
+                    'playlists': []
+                },
+                'authenticated': False
+            })
+        
+        # For now, return empty library until we implement proper library functionality
+        return jsonify({
+            'library': {
+                'songs': [],
+                'artists': [],
+                'albums': [],
+                'playlists': []
+            },
+            'authenticated': True
+        })
+    except Exception as e:
+        print(f"Library error: {e}")
+        return jsonify({
+            'library': {
+                'songs': [],
+                'artists': [],
+                'albums': [],
+                'playlists': []
+            },
+            'authenticated': False
+        })
+
+@app.route('/api/authenticate', methods=['POST'])
+def authenticate():
+    """Authenticate with YouTube Music"""
+    global browser_json_content, user_authenticated
+    
+    data = request.get_json()
+    if not data or 'browserJson' not in data:
+        return jsonify({'success': False, 'error': 'No browser.json provided'})
+    
+    browser_json = data['browserJson']
+    
+    try:
+        # Validate the JSON
+        json.loads(browser_json)
+        
+        # Save the browser.json content
+        browser_json_content = browser_json
+        user_authenticated = True
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Authentication error: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/export-data')
+def export_data():
+    """Export user data"""
+    try:
+        export_data = {
+            'songs': songs_db,
+            'artists': artists_db,
+            'search_history': search_history
+        }
+        
+        # Create a temporary file with the export data
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(export_data, f, indent=2)
+            temp_file = f.name
+        
+        return send_file(temp_file, as_attachment=True, download_name='musicgrab_export.json')
+    except Exception as e:
+        print(f"Export error: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/import-data', methods=['POST'])
+def import_data():
+    """Import user data"""
+    global songs_db, artists_db, search_history
+    
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file provided'})
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'success': False, 'error': 'No file selected'})
+    
+    try:
+        data = json.load(file)
+        
+        # Update the global variables
+        if 'songs' in data:
+            songs_db = data['songs']
+        if 'artists' in data:
+            artists_db = data['artists']
+        if 'search_history' in data:
+            search_history = data['search_history']
+        
+        # Save the updated data
+        save_user_data()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Import error: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
 
