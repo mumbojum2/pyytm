@@ -76,7 +76,7 @@ def sanitize_filename(filename):
     return re.sub(r'[<>:"/\\|?*]', '', filename)
 
 def get_youtube_suggestions(query):
-    """Get YouTube search suggestions - CLEANED VERSION"""
+    """Get YouTube search suggestions - FIXED VERSION"""
     if not query or len(query) < 2:
         return []
 
@@ -109,30 +109,32 @@ def get_youtube_suggestions(query):
                 if len(data) > 1 and isinstance(data[1], list):
                     raw_suggestions = data[1][:8]
                     
-                    # CLEAN the suggestions - remove trailing numbers and weird characters
+                    # BETTER cleaning - less aggressive
                     cleaned_suggestions = []
                     for suggestion in raw_suggestions:
                         if suggestion and isinstance(suggestion, str):
-                            # Remove trailing numbers and any other garbage
+                            # Remove trailing numbers and garbage but be more lenient
                             clean_suggestion = re.sub(r'\s*\d{8,}$', '', suggestion)  # Remove trailing 8+ digit numbers
                             clean_suggestion = re.sub(r'[<>:"/\\|?*]+$', '', clean_suggestion)  # Remove trailing invalid chars
                             clean_suggestion = clean_suggestion.strip()
                             
-                            # Only keep if it's meaningful and not too long
+                            # More lenient filtering
                             if (clean_suggestion and 
-                                len(clean_suggestion) > len(query) and 
+                                len(clean_suggestion) >= len(query) and  # Changed to >= instead of >
                                 len(clean_suggestion) < 60 and
-                                not clean_suggestion.endswith('...')):
+                                not clean_suggestion.endswith('...') and
+                                clean_suggestion.lower() != query.lower()):  # Don't return exact same as query
                                 cleaned_suggestions.append(clean_suggestion)
                     
                     print(f"✅ Got {len(cleaned_suggestions)} cleaned suggestions for: {query}")
-                    print(f"📝 Cleaned suggestions: {cleaned_suggestions}")
+                    if cleaned_suggestions:
+                        print(f"📝 Cleaned suggestions: {cleaned_suggestions}")
                     return cleaned_suggestions
                     
     except Exception as e:
         print(f"Suggestions error: {e}")
     
-    # Fallback if anything fails
+    # Fallback if anything fails - return basic suggestions
     fallback_suggestions = [
         f"{query} songs",
         f"{query} lyrics", 
@@ -140,6 +142,7 @@ def get_youtube_suggestions(query):
         f"{query} album",
         f"{query} music video"
     ]
+    print(f"🔄 Using fallback suggestions: {fallback_suggestions}")
     return fallback_suggestions
 
 def parse_view_count(view_str):
@@ -779,6 +782,7 @@ def debug_suggestions():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
 
