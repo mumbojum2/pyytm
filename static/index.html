@@ -1023,7 +1023,7 @@ const handleImportData = async (event) => {
     {activeTab === 'settings' && (
         <div className="fade-in max-w-2xl mx-auto">
             <h2 className="text-2xl font-bold text-white mb-6">Settings</h2>
-            
+           
             {/* Authentication Section */}
             <div className="bg-white/10 rounded-2xl p-6 mb-6 backdrop-blur-sm">
                 <h3 className="text-xl font-semibold text-white mb-4">Authentication</h3>
@@ -1085,7 +1085,7 @@ const handleImportData = async (event) => {
                     </label>
                 </div>
                 <p className="text-white/70 text-sm">Export or import your downloaded songs and artists data</p>
-                
+               
                 {/* Stats */}
                 <div className="mt-6 pt-6 border-t border-white/20">
                     <h4 className="text-lg font-semibold text-white mb-3">Your Statistics</h4>
@@ -1099,17 +1099,16 @@ const handleImportData = async (event) => {
                             <div className="text-white/70 text-sm">Artists</div>
                         </div>
                     </div>
-                        </div>
-                    </div>
                 </div>
-            )};
-        } 
-    );
-}
+            </div>
+        </div>
+    )}
+
+</div>  {/* ← Closes main content <div> */}
+);      {/* ← Closes return ( */ 
+
+} // ← Closes function App()
 
 ReactDOM.render(<App />, document.getElementById('app'));
-</script>
-</body>
-</html>
 
 
