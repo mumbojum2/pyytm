@@ -168,56 +168,62 @@
 
             // FIXED: Simple suggestions without aggressive filtering
             // DEBUG VERSION - Replace your fetchSuggestions function with this
+// FINAL CLEANED VERSION - Replace your fetchSuggestions function
 const fetchSuggestions = async () => {
-    console.log('🔄 fetchSuggestions called with:', searchQuery);
-    
     if (!searchQuery.trim() || searchQuery.length < 2) {
-        console.log('❌ Query too short');
         setSuggestions([]);
         setShowSuggestions(false);
         return;
     }
 
     try {
-        console.log('📡 Fetching suggestions from API...');
         const response = await fetch(`${API_BASE}/api/suggestions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query: searchQuery })
         });
 
-        console.log('✅ API response status:', response.status);
-        
         if (response.ok) {
             const data = await response.json();
-            console.log('🔍 Full API response data:', data);
-            console.log('🎯 Raw suggestions array:', data.suggestions);
-            console.log('📊 Suggestions type:', typeof data.suggestions);
-            console.log('🔢 Suggestions length:', data.suggestions ? data.suggestions.length : 0);
             
-            if (data.suggestions && Array.isArray(data.suggestions)) {
-                console.log('📝 First few suggestions:', data.suggestions.slice(0, 3));
-            }
+            // Final cleanup on frontend just in case
+            const cleanSuggestions = (data.suggestions || [])
+                .filter(suggestion => {
+                    if (!suggestion || typeof suggestion !== 'string') return false;
+                    
+                    const clean = suggestion.trim();
+                    
+                    // Remove any remaining garbage
+                    if (clean.length < 2 || clean.length > 50) return false;
+                    if (/^\d+$/.test(clean)) return false; // Only numbers
+                    if (clean === searchQuery) return false; // Same as query
+                    
+                    return true;
+                })
+                .map(suggestion => {
+                    // Final cleanup - remove any trailing numbers or weird chars
+                    return suggestion
+                        .replace(/\s+\d{6,}$/g, '') // Remove trailing 6+ digit numbers
+                        .replace(/[<>:"/\\|?*]+$/g, '') // Remove trailing invalid filename chars
+                        .replace(/\s+\.{3,}$/g, '') // Remove trailing ellipsis
+                        .trim();
+                })
+                .filter(suggestion => suggestion.length > 0)
+                .slice(0, 5);
             
-            // EXTREMELY simple filtering - just show whatever we get
-            const suggestions = Array.isArray(data.suggestions) ? data.suggestions.slice(0, 5) : [];
-            
-            console.log('🎯 Final suggestions to display:', suggestions);
-            
-            setSuggestions(suggestions);
-            setShowSuggestions(suggestions.length > 0);
+            console.log('🎯 Cleaned suggestions:', cleanSuggestions);
+            setSuggestions(cleanSuggestions);
+            setShowSuggestions(cleanSuggestions.length > 0);
         } else {
-            console.log('❌ API response not OK');
             setSuggestions([]);
             setShowSuggestions(false);
         }
     } catch (error) {
-        console.error('💥 Suggestions error:', error);
+        console.error('Suggestions error:', error);
         setSuggestions([]);
         setShowSuggestions(false);
     }
 };
-
             const handleSearch = async (query = searchQuery) => {
                 const searchTerm = query.trim();
                 if (!searchTerm) {
@@ -926,4 +932,5 @@ const fetchSuggestions = async () => {
     </script>
 </body>
 </html>
+
 
