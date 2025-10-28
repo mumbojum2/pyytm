@@ -86,6 +86,7 @@ def get_youtube_suggestions(query):
             'client': 'firefox',
             'q': query,
             'hl': 'en',
+            'ds': 'yt'
         }
 
         # OPTIMIZATION: Shorter timeout and connection pooling
@@ -761,6 +762,7 @@ def debug_suggestions():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
 
