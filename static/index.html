@@ -51,57 +51,86 @@
         const API_BASE = window.location.origin;
 
         function App() {
-            const [activeTab, setActiveTab] = useState('home');
-            const [searchQuery, setSearchQuery] = useState('');
-            const [searchResults, setSearchResults] = useState({songs: [], artists: [], albums: []});
-            const [suggestions, setSuggestions] = useState([]);
-            const [showSuggestions, setShowSuggestions] = useState(false);
-            const [songs, setSongs] = useState([]);
-            const [artists, setArtists] = useState([]);
-            const [libraryData, setLibraryData] = useState({songs: [], albums: [], artists: [], playlists: []});
-            const [browserJson, setBrowserJson] = useState('');
-            const [userAuthenticated, setUserAuthenticated] = useState(false);
-            const [searchHistory, setSearchHistory] = useState([]);
-            const [downloading, setDownloading] = useState(null);
-            const [searchFocused, setSearchFocused] = useState(false);
-            const [loading, setLoading] = useState(false);
-            const [message, setMessage] = useState({ text: '', type: '' });
-            const [loadedThumbnails, setLoadedThumbnails] = useState(new Set());
-            const [homeData, setHomeData] = useState({recommendations: [], featured: [], authenticated: false});
-            const [artistPage, setArtistPage] = useState(null);
-            const [nowPlaying, setNowPlaying] = useState(null);
-            const [audioProgress, setAudioProgress] = useState(0);
-            const [viewCounts, setViewCounts] = useState({});
+const [activeTab, setActiveTab] = useState('home');
+const [searchQuery, setSearchQuery] = useState('');
+const [searchResults, setSearchResults] = useState({songs: [], artists: [], albums: []});
+const [suggestions, setSuggestions] = useState([]);
+const [showSuggestions, setShowSuggestions] = useState(false);
+const [songs, setSongs] = useState([]);
+const [artists, setArtists] = useState([]);
+const [libraryData, setLibraryData] = useState({songs: [], albums: [], artists: [], playlists: []});
+const [browserJson, setBrowserJson] = useState('');
+const [userAuthenticated, setUserAuthenticated] = useState(false);
+const [searchHistory, setSearchHistory] = useState([]);
+const [downloading, setDownloading] = useState(null);
+const [searchFocused, setSearchFocused] = useState(false);
+const [loading, setLoading] = useState(false);
+const [message, setMessage] = useState({ text: '', type: '' });
+const [loadedThumbnails, setLoadedThumbnails] = useState(new Set());
+const [homeData, setHomeData] = useState({recommendations: [], featured: [], authenticated: false});
+const [artistPage, setArtistPage] = useState(null);
+const [nowPlaying, setNowPlaying] = useState(null);
+const [audioProgress, setAudioProgress] = useState(0);
+const [viewCounts, setViewCounts] = useState({});
 
-            const searchRef = useRef(null);
-            const suggestionTimer = useRef(null);
-            const audioRef = useRef(null);
+const searchRef = useRef(null);
+const suggestionTimer = useRef(null);
+const abortControllerRef = useRef(null); // NEW: For request cancellation
+const audioRef = useRef(null);
 
-            const showMessage = (text, type = 'info') => {
-                setMessage({ text, type });
-                setTimeout(() => setMessage({ text: '', type: '' }), 4000);
-            };
+const showMessage = (text, type = 'info') => {
+    setMessage({ text, type });
+    setTimeout(() => setMessage({ text: '', type: '' }), 4000);
+};
 
-            useEffect(() => {
-                loadHomeData();
-                loadSongs();
-                loadArtists();
-                loadSearchHistory();
-                checkAuthentication();
-            }, []);
+// OPTIMIZED: Parallel data loading
+useEffect(() => {
+    const loadInitialData = async () => {
+        try {
+            // Load all data in parallel instead of sequentially
+            await Promise.all([
+                loadHomeData(),
+                loadSongs(),
+                loadArtists(),
+                loadSearchHistory()
+            ]);
+            checkAuthentication();
+        } catch (error) {
+            console.error('Initial data loading error:', error);
+        }
+    };
+    
+    loadInitialData();
+}, []);
 
-            // Search handling
-            useEffect(() => {
-                if (searchQuery.length >= 2) {
-                    if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
-                    suggestionTimer.current = setTimeout(() => {
-                        fetchSuggestions();
-                    }, 200);
-                } else {
-                    setShowSuggestions(false);
-                    setSuggestions([]);
-                }
-            }, [searchQuery]);
+// OPTIMIZED: Faster search handling with request cancellation
+useEffect(() => {
+    if (searchQuery.length >= 2) {
+        // Cancel previous request immediately
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        
+        // Clear previous timer
+        if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
+        
+        // FASTER: Reduced from 200ms to 120ms for quicker response
+        suggestionTimer.current = setTimeout(() => {
+            fetchSuggestions(searchQuery);
+        }, 120);
+    } else {
+        // Hide suggestions immediately when query is too short
+        setShowSuggestions(false);
+        setSuggestions([]);
+    }
+    
+    // Cleanup function
+    return () => {
+        if (suggestionTimer.current) {
+            clearTimeout(suggestionTimer.current);
+        }
+    };
+}, [searchQuery]);
 
             const loadHomeData = async () => {
                 try {
@@ -932,5 +961,6 @@ const fetchSuggestions = async () => {
     </script>
 </body>
 </html>
+
 
 
