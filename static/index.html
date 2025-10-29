@@ -1133,7 +1133,7 @@
             element.querySelector('.play-btn').addEventListener('click', () => playSong(song));
             element.querySelector('.download-btn').addEventListener('click', (e) => {
                 e.stopPropagation();
-                downloadSong(song);
+                downloadSong(song);  // NEW - downloads to user's PC
             });
             
             return element;
@@ -1275,52 +1275,27 @@
         }
 
         // Download Functions
-        async function downloadSong(song) {
-            try {
-                showLoading(`Downloading ${song.title}...`);
-                
-                const data = await apiCall('/api/download', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        videoId: song.id,
-                        title: song.title,
-                        artist: song.artist,
-                        album: song.album || '',
-                        thumbnail: song.thumbnail || '',
-                        format: 'mp3'
-                    })
-                });
-                
-                if (data.status === 'success') {
-                    showNotification(`Downloaded: ${song.title}`, 'success');
-                    
-                    // Refresh library and downloads
-                    if (currentSection === 'library') loadLibraryData();
-                    if (currentSection === 'downloads') loadDownloadsData();
-                    
-                    // Automatically play the downloaded song if it's the current song
-                    if (currentSong && currentSong.id === song.id) {
-                        // The song is now in our library, we can play it directly
-                        const downloadUrl = `/downloads/${data.filename}`;
-                        if (currentAudio) {
-                            currentAudio.pause();
-                        }
-                        currentAudio = new Audio(downloadUrl);
-                        currentAudio.play();
-                        isPlaying = true;
-                        playBtn.innerHTML = '<i class="fas fa-pause"></i>';
-                    }
-                } else {
-                    throw new Error(data.error || 'Download failed');
-                }
-                
-            } catch (error) {
-                console.error('Download failed:', error);
-                showNotification(`Download failed: ${error.message}`, 'error');
-            } finally {
-                hideLoading();
-            }
-        }
+async function downloadSong(song) {
+    try {
+        // This will trigger browser download directly to user's PC
+        const downloadUrl = `/api/direct-download/${song.id}`;
+        
+        // Create invisible link and click it
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = `${song.artist} - ${song.title}.mp3`;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showNotification(`Downloading "${song.title}" to your computer...`, 'success');
+        
+    } catch (error) {
+        console.error('Download failed:', error);
+        showNotification('Download failed', 'error');
+    }
+}
 
         // Authentication Functions
         async function submitAuthentication() {
@@ -1428,3 +1403,4 @@
     </script>
 </body>
 </html>
+
