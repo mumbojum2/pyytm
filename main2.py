@@ -5,7 +5,7 @@ import os
 import json
 import subprocess
 import sys
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 import threading
 import time
@@ -474,9 +474,9 @@ def add_metadata_to_file(filepath, title, artist, album, thumbnail_url=None):
         print(f"⚠️ Metadata error: {e}")
 
 def get_audio_stream_url(video_id):
-    """Get direct audio stream URL for INSTANT playback"""
+    """Get direct audio stream URL for INSTANT playback - UPDATED"""
     try:
-        # ULTRA-FAST stream extraction
+        # Updated settings for SABR streaming
         ydl_opts = {
             'format': 'bestaudio/best',
             'quiet': True,
@@ -489,23 +489,18 @@ def get_audio_stream_url(video_id):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
             
-            # Prioritize formats for fastest streaming
+            # Try multiple methods to get URL
             if 'url' in info:
                 return info['url']
             elif 'formats' in info:
-                # Find formats optimized for streaming
+                # Find any working audio format
                 audio_formats = [f for f in info['formats'] if f.get('vcodec') == 'none' and f.get('acodec') != 'none']
                 
-                # Prefer m4a for faster streaming
-                m4a_formats = [f for f in audio_formats if f.get('ext') == 'm4a']
-                if m4a_formats:
-                    m4a_formats.sort(key=lambda x: x.get('abr', 0) or 0, reverse=True)
-                    return m4a_formats[0]['url']
-                
-                # Fallback to any audio format
                 if audio_formats:
-                    audio_formats.sort(key=lambda x: x.get('abr', 0) or 0, reverse=True)
-                    return audio_formats[0]['url']
+                    # Just get the first working format
+                    for fmt in audio_formats:
+                        if fmt.get('url'):
+                            return fmt['url']
             
         return None
     except Exception as e:
@@ -1103,13 +1098,19 @@ def import_data():
 
 @app.route('/api/direct-download/<video_id>')
 def direct_download(video_id):
-    """Stream download directly to user's computer"""
+    """Stream download directly to user's computer - FIXED"""
     try:
-        # Get video info
+        # Use settings that work with YouTube's SABR streaming
         ydl_opts = {
             'format': 'bestaudio/best',
-            'quiet': True,
+            'quiet': False,  # Set to False to see what's happening
+            'no_warnings': False,
+            'extract_flat': False,
+            'socket_timeout': 30,
+            'retries': 3,
         }
+        
+        print(f"🔧 Starting direct download for: {video_id}")
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
@@ -1121,11 +1122,53 @@ def direct_download(video_id):
             sanitized_artist = "".join(c for c in artist if c.isalnum() or c in (" ", "-", "_")).strip()
             filename = f"{sanitized_artist} - {sanitized_title}.mp3"
             
+            print(f"📄 Filename: {filename}")
+            print(f"🎵 Title: {title}")
+            print(f"🎤 Artist: {artist}")
+            
             # Get direct audio URL
-            audio_url = info['url']
+            audio_url = None
+            
+            # Method 1: Try direct URL first
+            if 'url' in info:
+                audio_url = info['url']
+                print("✅ Using direct URL from info")
+            
+            # Method 2: Try formats
+            if not audio_url and 'formats' in info:
+                # Find audio-only formats
+                audio_formats = [f for f in info['formats'] if f.get('vcodec') == 'none' and f.get('acodec') != 'none']
+                print(f"🔍 Found {len(audio_formats)} audio formats")
+                
+                if audio_formats:
+                    # Sort by quality
+                    audio_formats.sort(key=lambda x: x.get('abr', 0) or 0, reverse=True)
+                    
+                    for i, fmt in enumerate(audio_formats[:5]):  # Try top 5
+                        if fmt.get('url'):
+                            audio_url = fmt['url']
+                            print(f"✅ Using format {i+1}: {fmt.get('ext')} - {fmt.get('abr')}kbps")
+                            break
+            
+            if not audio_url:
+                print("❌ No audio URL found, using fallback")
+                # Fallback: Use the first available format
+                if 'formats' in info and info['formats']:
+                    audio_url = info['formats'][0].get('url')
+                    print(f"🔄 Fallback to first format: {info['formats'][0].get('ext')}")
+            
+            if not audio_url:
+                return jsonify({'error': 'Could not extract audio stream'}), 500
+            
+            print(f"🔗 Audio URL obtained, streaming...")
             
             # Stream directly to user's browser for download
-            response = requests.get(audio_url, stream=True, timeout=30)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Referer': 'https://www.youtube.com/',
+            }
+            
+            response = requests.get(audio_url, headers=headers, stream=True, timeout=30)
             
             return Response(
                 response.iter_content(chunk_size=8192),
@@ -1137,10 +1180,10 @@ def direct_download(video_id):
             )
             
     except Exception as e:
-        print(f"Direct download error: {e}")
+        print(f"❌ Direct download error: {e}")
         return jsonify({'error': str(e)}), 500
-
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
