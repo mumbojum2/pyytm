@@ -5,8 +5,7 @@ import os
 import json
 import subprocess
 import sys
-from flask import Flask, request, jsonify, send_file
-from flask import Response
+from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 import threading
 import time
@@ -1171,8 +1170,8 @@ def direct_download(video_id):
             
             response = requests.get(audio_url, headers=headers, stream=True, timeout=30)
             
-            # FIX: Use flask.Response instead of just Response
-            return flask.Response(
+            # FIX: Use Response directly (it's imported at the top)
+            return Response(
                 response.iter_content(chunk_size=8192),
                 mimetype='audio/mpeg',
                 headers={
