@@ -1094,6 +1094,18 @@
             }
         }
 
+        function directDownload(song) {
+    // This will download directly to your PC
+    const downloadUrl = `/api/direct-download/${song.id}`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `${song.artist} - ${song.title}.mp3`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
         function createSongResultElement(song) {
             const element = document.createElement('div');
             element.className = 'glass-effect rounded-xl p-4 flex items-center justify-between song-card';
@@ -1131,9 +1143,10 @@
             
             // Add event listeners
             element.querySelector('.play-btn').addEventListener('click', () => playSong(song));
+            // Change to use direct download:
             element.querySelector('.download-btn').addEventListener('click', (e) => {
                 e.stopPropagation();
-                downloadSong(song);  // NEW - downloads to user's PC
+                directDownload(song);  // This uses /api/direct-download/
             });
             
             return element;
@@ -1403,4 +1416,5 @@ async function downloadSong(song) {
     </script>
 </body>
 </html>
+
 
