@@ -4,1112 +4,1253 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MusicGrab Pro - YouTube Music Downloader</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .animate-spin { animation: spin 1s linear infinite; }
-        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .glass-effect { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
-        .fade-in { animation: fadeIn 0.5s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .explicit-badge { background: #dc2626; color: white; border-radius: 50%; width: 18px; height: 18px; font-size: 10px; font-weight: bold; display: flex; align-items: center; justify-content: center; margin-left: 8px; }
-        .hover-lift { transition: all 0.3s ease; }
-        .hover-lift:hover { transform: translateY(-5px); }
-        .thumbnail-loading { background: linear-gradient(45deg, #f3f4f6, #e5e7eb, #f3f4f6); background-size: 200% 200%; animation: shimmer 2s infinite; }
-        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-        .audio-player { width: 100%; height: 40px; outline: none; }
-        .progress-bar { width: 100%; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; overflow: hidden; }
-        .progress-fill { height: 100%; background: #10b981; transition: width 0.1s ease; }
-        .play-button-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.3); border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease; }
-        .play-button-overlay:hover { opacity: 1; }
-        .suggestions-dropdown {
-    position: absolute;
-    width: 100%;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border-radius: 1rem;
-    margin-top: 0.5rem;
-    padding: 0.5rem 0;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    z-index: 1000;
-    max-height: 300px;
-    overflow-y: auto;
-}
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .gradient-text {
+            background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .song-card {
+            transition: all 0.3s ease;
+        }
+        
+        .song-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+        
+        .loading-spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid #fff;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .progress-bar {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
+            transition: width 0.3s ease;
+        }
     </style>
 </head>
-<body class="gradient-bg min-h-screen">
-    <div id="app"></div>
+<body class="gradient-bg min-h-screen text-white">
+    <!-- Navigation -->
+    <nav class="glass-effect p-4 sticky top-0 z-10">
+        <div class="container mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fas fa-music text-xl"></i>
+                <h1 class="text-xl font-bold gradient-text">MusicGrab Pro</h1>
+            </div>
+            
+            <div class="flex space-x-4">
+                <button id="homeBtn" class="px-4 py-2 rounded-lg hover:bg-white/10 transition">
+                    <i class="fas fa-home mr-2"></i>Home
+                </button>
+                <button id="libraryBtn" class="px-4 py-2 rounded-lg hover:bg-white/10 transition">
+                    <i class="fas fa-heart mr-2"></i>Library
+                </button>
+                <button id="downloadsBtn" class="px-4 py-2 rounded-lg hover:bg-white/10 transition">
+                    <i class="fas fa-download mr-2"></i>Downloads
+                </button>
+            </div>
+            
+            <div class="flex items-center space-x-2">
+                <button id="authBtn" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition">
+                    <i class="fas fa-user mr-2"></i>Sign In
+                </button>
+            </div>
+        </div>
+    </nav>
 
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
-        const API_BASE = window.location.origin;
+    <!-- Main Content -->
+    <main class="container mx-auto p-4">
+        <!-- Search Section -->
+        <section id="searchSection" class="mb-8">
+            <div class="max-w-2xl mx-auto">
+                <div class="relative">
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        placeholder="Search for songs, artists, or albums..." 
+                        class="w-full p-4 rounded-xl glass-effect text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                    >
+                    <button id="searchBtn" class="absolute right-2 top-2 p-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                
+                <!-- Search Suggestions -->
+                <div id="suggestions" class="mt-2 hidden">
+                    <div class="glass-effect rounded-xl p-2">
+                        <div id="suggestionsList" class="space-y-1"></div>
+                    </div>
+                </div>
+                
+                <!-- Search History -->
+                <div id="searchHistory" class="mt-4 hidden">
+                    <h3 class="text-sm font-medium mb-2">Recent Searches</h3>
+                    <div id="historyList" class="flex flex-wrap gap-2"></div>
+                </div>
+            </div>
+        </section>
 
-        function App() {
-const [activeTab, setActiveTab] = useState('home');
-const [searchQuery, setSearchQuery] = useState('');
-const [searchResults, setSearchResults] = useState({songs: [], artists: [], albums: []});
-const [suggestions, setSuggestions] = useState([]);
-const [showSuggestions, setShowSuggestions] = useState(false);
-const [songs, setSongs] = useState([]);
-const [artists, setArtists] = useState([]);
-const [libraryData, setLibraryData] = useState({songs: [], albums: [], artists: [], playlists: []});
-const [browserJson, setBrowserJson] = useState('');
-const [userAuthenticated, setUserAuthenticated] = useState(false);
-const [searchHistory, setSearchHistory] = useState([]);
-const [downloading, setDownloading] = useState(null);
-const [searchFocused, setSearchFocused] = useState(false);
-const [loading, setLoading] = useState(false);
-const [message, setMessage] = useState({ text: '', type: '' });
-const [loadedThumbnails, setLoadedThumbnails] = useState(new Set());
-const [homeData, setHomeData] = useState({recommendations: [], featured: [], authenticated: false});
-const [artistPage, setArtistPage] = useState(null);
-const [nowPlaying, setNowPlaying] = useState(null);
-const [audioProgress, setAudioProgress] = useState(0);
-const [viewCounts, setViewCounts] = useState({});
+        <!-- Home Section -->
+        <section id="homeSection" class="fade-in">
+            <!-- Featured Categories -->
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold mb-4">Featured</h2>
+                <div id="featuredGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Featured items will be loaded here -->
+                </div>
+            </div>
+            
+            <!-- Recommendations -->
+            <div>
+                <h2 class="text-2xl font-bold mb-4">Recommended For You</h2>
+                <div id="recommendationsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                    <!-- Recommendations will be loaded here -->
+                </div>
+            </div>
+        </section>
 
-const searchRef = useRef(null);
-const suggestionTimer = useRef(null);
-const abortControllerRef = useRef(null); // NEW: For request cancellation
-const audioRef = useRef(null);
+        <!-- Search Results Section -->
+        <section id="searchResultsSection" class="hidden fade-in">
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="resultsTitle" class="text-2xl font-bold">Search Results</h2>
+                <button id="backToHome" class="px-4 py-2 rounded-lg glass-effect hover:bg-white/10 transition">
+                    <i class="fas fa-arrow-left mr-2"></i>Back to Home
+                </button>
+            </div>
+            
+            <!-- Tabs -->
+            <div class="mb-6">
+                <div class="flex space-x-4 border-b border-white/20">
+                    <button id="songsTab" class="tab-button px-4 py-2 border-b-2 border-purple-500 font-medium">Songs</button>
+                    <button id="artistsTab" class="tab-button px-4 py-2 text-gray-300 hover:text-white transition">Artists</button>
+                    <button id="albumsTab" class="tab-button px-4 py-2 text-gray-300 hover:text-white transition">Albums</button>
+                </div>
+            </div>
+            
+            <!-- Results Content -->
+            <div id="songsResults" class="space-y-4">
+                <!-- Songs will be loaded here -->
+            </div>
+            
+            <div id="artistsResults" class="hidden grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <!-- Artists will be loaded here -->
+            </div>
+            
+            <div id="albumsResults" class="hidden grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <!-- Albums will be loaded here -->
+            </div>
+        </section>
 
-const showMessage = (text, type = 'info') => {
-    setMessage({ text, type });
-    setTimeout(() => setMessage({ text: '', type: '' }), 4000);
-};
+        <!-- Library Section -->
+        <section id="librarySection" class="hidden fade-in">
+            <h2 class="text-2xl font-bold mb-6">Your Library</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Downloaded Songs -->
+                <div class="glass-effect rounded-xl p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold">Downloaded Songs</h3>
+                        <span id="songsCount" class="bg-purple-600 px-3 py-1 rounded-full text-sm">0</span>
+                    </div>
+                    <div id="librarySongs" class="space-y-3 max-h-80 overflow-y-auto">
+                        <!-- Downloaded songs will be loaded here -->
+                    </div>
+                </div>
+                
+                <!-- Favorite Artists -->
+                <div class="glass-effect rounded-xl p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold">Favorite Artists</h3>
+                        <span id="artistsCount" class="bg-purple-600 px-3 py-1 rounded-full text-sm">0</span>
+                    </div>
+                    <div id="libraryArtists" class="space-y-3 max-h-80 overflow-y-auto">
+                        <!-- Favorite artists will be loaded here -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Data Management -->
+            <div class="mt-8 glass-effect rounded-xl p-6">
+                <h3 class="text-xl font-bold mb-4">Data Management</h3>
+                <div class="flex space-x-4">
+                    <button id="exportBtn" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition">
+                        <i class="fas fa-file-export mr-2"></i>Export Data
+                    </button>
+                    <button id="importBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition">
+                        <i class="fas fa-file-import mr-2"></i>Import Data
+                    </button>
+                    <input type="file" id="importFile" class="hidden" accept=".json">
+                </div>
+            </div>
+        </section>
 
-// OPTIMIZED: Parallel data loading
-useEffect(() => {
-    const loadInitialData = async () => {
-        try {
-            // Load all data in parallel instead of sequentially
-            await Promise.all([
-                loadHomeData(),
-                loadSongs(),
-                loadArtists(),
-                loadSearchHistory()
-            ]);
-            checkAuthentication();
-        } catch (error) {
-            console.error('Initial data loading error:', error);
-        }
-    };
-    
-    loadInitialData();
-}, []);
+        <!-- Downloads Section -->
+        <section id="downloadsSection" class="hidden fade-in">
+            <h2 class="text-2xl font-bold mb-6">Your Downloads</h2>
+            
+            <div id="downloadsList" class="space-y-4">
+                <!-- Downloads will be loaded here -->
+            </div>
+        </section>
 
-// OPTIMIZED: Faster search handling with request cancellation
-useEffect(() => {
-    if (searchQuery.length >= 2) {
-        // Cancel previous request immediately
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-        }
+        <!-- Authentication Modal -->
+        <div id="authModal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-20 hidden">
+            <div class="glass-effect rounded-xl p-6 max-w-md w-full mx-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold">Sign In to YouTube Music</h3>
+                    <button id="closeAuthModal" class="text-gray-300 hover:text-white">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <p class="text-gray-300 mb-4">
+                    To get personalized recommendations, sign in with your YouTube Music account.
+                </p>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">Paste browser.json content:</label>
+                    <textarea 
+                        id="browserJson" 
+                        rows="8" 
+                        class="w-full p-3 rounded-lg bg-white/10 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                        placeholder='Paste your browser.json content here...'
+                    ></textarea>
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button id="cancelAuth" class="px-4 py-2 rounded-lg glass-effect hover:bg-white/10 transition">
+                        Cancel
+                    </button>
+                    <button id="submitAuth" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition">
+                        Sign In
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Player -->
+        <div id="player" class="fixed bottom-0 left-0 right-0 glass-effect p-4 hidden">
+            <div class="container mx-auto">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4 w-1/4">
+                        <img id="playerThumbnail" src="" alt="" class="w-12 h-12 rounded-lg hidden">
+                        <div>
+                            <div id="playerTitle" class="font-medium truncate">Song Title</div>
+                            <div id="playerArtist" class="text-sm text-gray-300 truncate">Artist Name</div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-col items-center w-2/4">
+                        <div class="flex items-center space-x-4 mb-2">
+                            <button id="prevBtn" class="text-gray-300 hover:text-white">
+                                <i class="fas fa-step-backward"></i>
+                            </button>
+                            <button id="playBtn" class="bg-white text-purple-600 rounded-full w-10 h-10 flex items-center justify-center hover:bg-gray-200">
+                                <i class="fas fa-play"></i>
+                            </button>
+                            <button id="nextBtn" class="text-gray-300 hover:text-white">
+                                <i class="fas fa-step-forward"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="w-full flex items-center space-x-2">
+                            <span id="currentTime" class="text-xs text-gray-300">0:00</span>
+                            <div class="progress-bar flex-1">
+                                <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                            </div>
+                            <span id="duration" class="text-xs text-gray-300">0:00</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center justify-end space-x-4 w-1/4">
+                        <button id="downloadCurrentBtn" class="text-gray-300 hover:text-white">
+                            <i class="fas fa-download"></i>
+                        </button>
+                        <button id="volumeBtn" class="text-gray-300 hover:text-white">
+                            <i class="fas fa-volume-up"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black/70 flex items-center justify-center z-30 hidden">
+        <div class="text-center">
+            <div class="loading-spinner mx-auto mb-4"></div>
+            <p id="loadingText" class="text-white">Loading...</p>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentAudio = null;
+        let currentSong = null;
+        let isPlaying = false;
+        let currentSection = 'home';
+        let searchResults = { songs: [], artists: [], albums: [] };
+        let librarySongs = [];
+        let libraryArtists = [];
+
+        // DOM Elements
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const suggestions = document.getElementById('suggestions');
+        const suggestionsList = document.getElementById('suggestionsList');
+        const searchHistory = document.getElementById('searchHistory');
+        const historyList = document.getElementById('historyList');
         
-        // Clear previous timer
-        if (suggestionTimer.current) clearTimeout(suggestionTimer.current);
+        const homeSection = document.getElementById('homeSection');
+        const searchResultsSection = document.getElementById('searchResultsSection');
+        const librarySection = document.getElementById('librarySection');
+        const downloadsSection = document.getElementById('downloadsSection');
         
-        // FASTER: Reduced from 200ms to 120ms for quicker response
-        suggestionTimer.current = setTimeout(() => {
-            fetchSuggestions(searchQuery);
-        }, 120);
-    } else {
-        // Hide suggestions immediately when query is too short
-        setShowSuggestions(false);
-        setSuggestions([]);
-    }
-    
-    // Cleanup function
-    return () => {
-        if (suggestionTimer.current) {
-            clearTimeout(suggestionTimer.current);
-        }
-    };
-}, [searchQuery]);
+        const homeBtn = document.getElementById('homeBtn');
+        const libraryBtn = document.getElementById('libraryBtn');
+        const downloadsBtn = document.getElementById('downloadsBtn');
+        const backToHome = document.getElementById('backToHome');
+        
+        const featuredGrid = document.getElementById('featuredGrid');
+        const recommendationsGrid = document.getElementById('recommendationsGrid');
+        
+        const songsTab = document.getElementById('songsTab');
+        const artistsTab = document.getElementById('artistsTab');
+        const albumsTab = document.getElementById('albumsTab');
+        
+        const songsResults = document.getElementById('songsResults');
+        const artistsResults = document.getElementById('artistsResults');
+        const albumsResults = document.getElementById('albumsResults');
+        const resultsTitle = document.getElementById('resultsTitle');
+        
+        const authBtn = document.getElementById('authBtn');
+        const authModal = document.getElementById('authModal');
+        const closeAuthModal = document.getElementById('closeAuthModal');
+        const cancelAuth = document.getElementById('cancelAuth');
+        const submitAuth = document.getElementById('submitAuth');
+        const browserJson = document.getElementById('browserJson');
+        
+        const librarySongsContainer = document.getElementById('librarySongs');
+        const libraryArtistsContainer = document.getElementById('libraryArtists');
+        const songsCount = document.getElementById('songsCount');
+        const artistsCount = document.getElementById('artistsCount');
+        
+        const downloadsList = document.getElementById('downloadsList');
+        
+        const exportBtn = document.getElementById('exportBtn');
+        const importBtn = document.getElementById('importBtn');
+        const importFile = document.getElementById('importFile');
+        
+        const player = document.getElementById('player');
+        const playerThumbnail = document.getElementById('playerThumbnail');
+        const playerTitle = document.getElementById('playerTitle');
+        const playerArtist = document.getElementById('playerArtist');
+        const playBtn = document.getElementById('playBtn');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const downloadCurrentBtn = document.getElementById('downloadCurrentBtn');
+        const currentTime = document.getElementById('currentTime');
+        const duration = document.getElementById('duration');
+        const progressFill = document.getElementById('progressFill');
+        
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingText = document.getElementById('loadingText');
 
-// OPTIMIZED: Fast suggestions with cancellation
-const fetchSuggestions = async (currentQuery) => {
-    if (!currentQuery || !currentQuery.trim() || currentQuery.length < 2) {
-        setSuggestions([]);
-        setShowSuggestions(false);
-        return;
-    }
-
-    // Cancel any previous request
-    if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-    }
-    
-    // Create new abort controller for this request
-    abortControllerRef.current = new AbortController();
-
-    try {
-        const response = await fetch(`${API_BASE}/api/suggestions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: currentQuery }),
-            signal: abortControllerRef.current.signal
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            loadHomeData();
+            loadSearchHistory();
+            
+            // Navigation
+            homeBtn.addEventListener('click', () => showSection('home'));
+            libraryBtn.addEventListener('click', () => showSection('library'));
+            downloadsBtn.addEventListener('click', () => showSection('downloads'));
+            backToHome.addEventListener('click', () => showSection('home'));
+            
+            // Search
+            searchInput.addEventListener('input', handleSearchInput);
+            searchBtn.addEventListener('click', performSearch);
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') performSearch();
+            });
+            
+            // Tabs
+            songsTab.addEventListener('click', () => showResultsTab('songs'));
+            artistsTab.addEventListener('click', () => showResultsTab('artists'));
+            albumsTab.addEventListener('click', () => showResultsTab('albums'));
+            
+            // Authentication
+            authBtn.addEventListener('click', () => authModal.classList.remove('hidden'));
+            closeAuthModal.addEventListener('click', () => authModal.classList.add('hidden'));
+            cancelAuth.addEventListener('click', () => authModal.classList.add('hidden'));
+            submitAuth.addEventListener('click', submitAuthentication);
+            
+            // Library
+            exportBtn.addEventListener('click', exportData);
+            importBtn.addEventListener('click', () => importFile.click());
+            importFile.addEventListener('change', importData);
+            
+            // Player
+            playBtn.addEventListener('click', togglePlay);
+            downloadCurrentBtn.addEventListener('click', downloadCurrentSong);
+            
+            // Close suggestions when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                    suggestions.classList.add('hidden');
+                }
+            });
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            
-            // Only update state if this is still the current query
-            if (currentQuery === searchQuery) {
-                const newSuggestions = (data.suggestions || []).slice(0, 5);
-                setSuggestions(newSuggestions);
-                setShowSuggestions(newSuggestions.length > 0);
+        // API Functions
+        async function apiCall(endpoint, options = {}) {
+            try {
+                const response = await fetch(endpoint, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                showNotification('An error occurred. Please try again.', 'error');
+                throw error;
             }
         }
-    } catch (error) {
-        if (error.name !== 'AbortError') {
-            console.error('Suggestions error:', error);
-        }
-    }
-};
 
-            const loadHomeData = async () => {
-                try {
-                    const response = await fetch(`${API_BASE}/api/home`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        setHomeData(data);
-                        setUserAuthenticated(data.authenticated);
-                    }
-                } catch (error) {
-                    console.error('Home data error:', error);
-                }
-            };
-
-            const loadLibraryData = async () => {
-                try {
-                    const response = await fetch(`${API_BASE}/api/library`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        setLibraryData(data.library);
-                        setUserAuthenticated(data.authenticated);
-                    }
-                } catch (error) {
-                    console.error('Library data error:', error);
-                }
-            };
-
-            const loadSongs = async () => {
-                try {
-                    const response = await fetch(`${API_BASE}/api/songs`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        setSongs(data.songs || []);
-                    }
-                } catch (error) {}
-            };
-
-            const loadArtists = async () => {
-                try {
-                    const response = await fetch(`${API_BASE}/api/artists`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        setArtists(data.artists || {});
-                    }
-                } catch (error) {}
-            };
-
-            const loadSearchHistory = async () => {
-                try {
-                    const response = await fetch(`${API_BASE}/api/search-history`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        setSearchHistory(data.history || []);
-                    }
-                } catch (error) {}
-            };
-
-            const checkAuthentication = async () => {
-                const savedAuth = localStorage.getItem('userAuthenticated');
-                if (savedAuth === 'true') {
-                    setUserAuthenticated(true);
-                }
-            };
+        // UI Functions
+        function showSection(section) {
+            // Hide all sections
+            homeSection.classList.add('hidden');
+            searchResultsSection.classList.add('hidden');
+            librarySection.classList.add('hidden');
+            downloadsSection.classList.add('hidden');
             
-            const handleSearch = async (query = searchQuery) => {
-                const searchTerm = query.trim();
-                if (!searchTerm) {
-                    showMessage('Please enter a search term', 'error');
-                    return;
-                }
+            // Remove active state from all nav buttons
+            document.querySelectorAll('nav button').forEach(btn => {
+                btn.classList.remove('bg-white/20');
+            });
+            
+            // Show selected section
+            if (section === 'home') {
+                homeSection.classList.remove('hidden');
+                homeBtn.classList.add('bg-white/20');
+                currentSection = 'home';
+            } else if (section === 'search') {
+                searchResultsSection.classList.remove('hidden');
+                currentSection = 'search';
+            } else if (section === 'library') {
+                librarySection.classList.remove('hidden');
+                libraryBtn.classList.add('bg-white/20');
+                loadLibraryData();
+                currentSection = 'library';
+            } else if (section === 'downloads') {
+                downloadsSection.classList.remove('hidden');
+                downloadsBtn.classList.add('bg-white/20');
+                loadDownloadsData();
+                currentSection = 'downloads';
+            }
+        }
 
-                setSearchQuery(searchTerm);
-                setShowSuggestions(false);
-                setLoading(true);
-                setActiveTab('search');
+        function showResultsTab(tab) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('border-purple-500', 'font-medium');
+                btn.classList.add('text-gray-300');
+            });
+            
+            // Hide all result sections
+            songsResults.classList.add('hidden');
+            artistsResults.classList.add('hidden');
+            albumsResults.classList.add('hidden');
+            
+            // Show selected tab
+            if (tab === 'songs') {
+                songsTab.classList.add('border-purple-500', 'font-medium');
+                songsTab.classList.remove('text-gray-300');
+                songsResults.classList.remove('hidden');
+            } else if (tab === 'artists') {
+                artistsTab.classList.add('border-purple-500', 'font-medium');
+                artistsTab.classList.remove('text-gray-300');
+                artistsResults.classList.remove('hidden');
+            } else if (tab === 'albums') {
+                albumsTab.classList.add('border-purple-500', 'font-medium');
+                albumsTab.classList.remove('text-gray-300');
+                albumsResults.classList.remove('hidden');
+            }
+        }
+
+        function showLoading(message = 'Loading...') {
+            loadingText.textContent = message;
+            loadingOverlay.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loadingOverlay.classList.add('hidden');
+        }
+
+        function showNotification(message, type = 'info') {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 p-4 rounded-lg z-40 fade-in ${
+                type === 'error' ? 'bg-red-600' : 
+                type === 'success' ? 'bg-green-600' : 'bg-blue-600'
+            }`;
+            notification.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas fa-${type === 'error' ? 'exclamation-triangle' : type === 'success' ? 'check-circle' : 'info-circle'} mr-2"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                notification.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 3000);
+        }
+
+        // Data Loading Functions
+        async function loadHomeData() {
+            try {
+                showLoading('Loading recommendations...');
+                const data = await apiCall('/api/home');
                 
-                try {
-                    const response = await fetch(`${API_BASE}/api/search`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ query: searchTerm })
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.error || 'Search failed');
-                    }
-                    
-                    const data = await response.json();
-                    setSearchResults(data);
-                    
-                } catch (error) {
-                    console.error('Search error:', error);
-                    showMessage('Search failed. Please try again.', 'error');
-                    setSearchResults({songs: [], artists: [], albums: []});
-                } finally {
-                    setLoading(false);
-                }
-            };
-
-            const handleArtistClick = async (artistId) => {
-                setLoading(true);
-                try {
-                    const response = await fetch(`${API_BASE}/api/artist/${artistId}`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        setArtistPage(data);
-                        setActiveTab('artist');
-                    } else {
-                        throw new Error('Artist not found');
-                    }
-                } catch (error) {
-                    showMessage('Failed to load artist', 'error');
-                } finally {
-                    setLoading(false);
-                }
-            };
-
-            const handlePlaySong = async (song) => {
-                try {
-                    showMessage(`🔄 Loading: ${song.title}`, 'info');
-                    
-                    const response = await fetch(`${API_BASE}/api/stream/${song.id}`);
-                    const data = await response.json();
-                    
-                    if (data.success && data.streamUrl) {
-                        const proxyUrl = `${API_BASE}/api/proxy-audio?url=${encodeURIComponent(data.streamUrl)}`;
-                        
-                        setNowPlaying({ 
-                            ...song, 
-                            audioUrl: proxyUrl,
-                            isStream: true 
+                // Render featured items
+                featuredGrid.innerHTML = '';
+                if (data.featured && data.featured.length > 0) {
+                    data.featured.forEach(item => {
+                        const featuredItem = document.createElement('div');
+                        featuredItem.className = 'glass-effect rounded-xl p-6 song-card cursor-pointer';
+                        featuredItem.innerHTML = `
+                            <div class="flex items-center justify-center w-12 h-12 rounded-lg ${item.color} mb-4">
+                                <i class="${item.icon} text-white"></i>
+                            </div>
+                            <h3 class="font-bold text-lg">${item.title}</h3>
+                            <p class="text-gray-300 text-sm">${item.subtitle}</p>
+                        `;
+                        featuredItem.addEventListener('click', () => {
+                            searchInput.value = item.title;
+                            performSearch();
                         });
-                        
-                        if (audioRef.current) {
-                            audioRef.current.src = proxyUrl;
-                            audioRef.current.load();
-                            setTimeout(() => {
-                                audioRef.current.play().catch(e => {
-                                    console.log('Auto-play prevented, user can click play button');
-                                });
-                            }, 100);
-                        }
-                        
-                        showMessage(`🎵 Now playing: ${song.title}`, 'success');
-                    } else {
-                        throw new Error(data.error || 'Could not get audio stream');
-                    }
-                } catch (error) {
-                    console.error('Play error:', error);
-                    showMessage('Failed to play song. Try downloading instead.', 'error');
+                        featuredGrid.appendChild(featuredItem);
+                    });
                 }
-            };
+                
+                // Render recommendations
+                recommendationsGrid.innerHTML = '';
+                if (data.recommendations && data.recommendations.length > 0) {
+                    data.recommendations.forEach(song => {
+                        const songCard = createSongCard(song);
+                        recommendationsGrid.appendChild(songCard);
+                    });
+                }
+                
+                // Update auth button
+                if (data.authenticated) {
+                    authBtn.innerHTML = '<i class="fas fa-user-check mr-2"></i>Signed In';
+                }
+                
+            } catch (error) {
+                console.error('Failed to load home data:', error);
+                showNotification('Failed to load recommendations', 'error');
+            } finally {
+                hideLoading();
+            }
+        }
 
-            const handleDownload = async (song) => {
-                setDownloading(song.id);
-                try {
-                    const payload = {
+        async function loadSearchHistory() {
+            try {
+                const data = await apiCall('/api/search-history');
+                if (data.history && data.history.length > 0) {
+                    searchHistory.classList.remove('hidden');
+                    historyList.innerHTML = '';
+                    
+                    data.history.forEach(term => {
+                        const historyItem = document.createElement('button');
+                        historyItem.className = 'px-3 py-1 rounded-full glass-effect text-sm hover:bg-white/10 transition';
+                        historyItem.textContent = term;
+                        historyItem.addEventListener('click', () => {
+                            searchInput.value = term;
+                            performSearch();
+                        });
+                        historyList.appendChild(historyItem);
+                    });
+                } else {
+                    searchHistory.classList.add('hidden');
+                }
+            } catch (error) {
+                console.error('Failed to load search history:', error);
+            }
+        }
+
+        async function loadLibraryData() {
+            try {
+                const data = await apiCall('/api/library');
+                
+                // Load songs
+                const songsData = await apiCall('/api/songs');
+                librarySongs = songsData.songs || [];
+                
+                // Load artists
+                const artistsData = await apiCall('/api/artists');
+                libraryArtists = Object.entries(artistsData.artists || {})
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 10);
+                
+                // Update counts
+                songsCount.textContent = librarySongs.length;
+                artistsCount.textContent = libraryArtists.length;
+                
+                // Render songs
+                librarySongsContainer.innerHTML = '';
+                if (librarySongs.length > 0) {
+                    librarySongs.forEach(song => {
+                        const songElement = document.createElement('div');
+                        songElement.className = 'flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition';
+                        songElement.innerHTML = `
+                            <div class="flex items-center space-x-3">
+                                <img src="${song.thumbnail || ''}" alt="${song.title}" class="w-10 h-10 rounded">
+                                <div>
+                                    <div class="font-medium truncate max-w-xs">${song.title}</div>
+                                    <div class="text-sm text-gray-300">${song.artist}</div>
+                                </div>
+                            </div>
+                            <button class="play-song-btn px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 transition" data-id="${song.id}">
+                                <i class="fas fa-play"></i>
+                            </button>
+                        `;
+                        librarySongsContainer.appendChild(songElement);
+                    });
+                    
+                    // Add event listeners to play buttons
+                    document.querySelectorAll('.play-song-btn').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const songId = btn.getAttribute('data-id');
+                            const song = librarySongs.find(s => s.id === songId);
+                            if (song) playSong(song);
+                        });
+                    });
+                } else {
+                    librarySongsContainer.innerHTML = '<p class="text-gray-400 text-center py-4">No songs in your library yet</p>';
+                }
+                
+                // Render artists
+                libraryArtistsContainer.innerHTML = '';
+                if (libraryArtists.length > 0) {
+                    libraryArtists.forEach(([artist, count]) => {
+                        const artistElement = document.createElement('div');
+                        artistElement.className = 'flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition';
+                        artistElement.innerHTML = `
+                            <div class="flex items-center space-x-3">
+                                <div class="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center">
+                                    <i class="fas fa-user"></i>
+                                </div>
+                                <div>
+                                    <div class="font-medium">${artist}</div>
+                                    <div class="text-sm text-gray-300">${count} song${count !== 1 ? 's' : ''}</div>
+                                </div>
+                            </div>
+                            <button class="search-artist-btn px-3 py-1 rounded-lg glass-effect hover:bg-white/10 transition" data-artist="${artist}">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        `;
+                        libraryArtistsContainer.appendChild(artistElement);
+                    });
+                    
+                    // Add event listeners to search buttons
+                    document.querySelectorAll('.search-artist-btn').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const artist = btn.getAttribute('data-artist');
+                            searchInput.value = artist;
+                            performSearch();
+                        });
+                    });
+                } else {
+                    libraryArtistsContainer.innerHTML = '<p class="text-gray-400 text-center py-4">No favorite artists yet</p>';
+                }
+                
+            } catch (error) {
+                console.error('Failed to load library data:', error);
+                showNotification('Failed to load library', 'error');
+            }
+        }
+
+        async function loadDownloadsData() {
+            try {
+                const data = await apiCall('/api/songs');
+                downloadsList.innerHTML = '';
+                
+                if (data.songs && data.songs.length > 0) {
+                    data.songs.forEach(song => {
+                        const downloadItem = document.createElement('div');
+                        downloadItem.className = 'glass-effect rounded-xl p-4 flex items-center justify-between';
+                        downloadItem.innerHTML = `
+                            <div class="flex items-center space-x-4">
+                                <img src="${song.thumbnail || ''}" alt="${song.title}" class="w-12 h-12 rounded-lg">
+                                <div>
+                                    <div class="font-bold">${song.title}</div>
+                                    <div class="text-gray-300">${song.artist}</div>
+                                    <div class="text-sm text-gray-400">Downloaded: ${song.downloaded_at || 'Unknown'}</div>
+                                </div>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button class="play-download-btn px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 transition" data-id="${song.id}">
+                                    <i class="fas fa-play"></i>
+                                </button>
+                                <a href="/api/download-file/${song.id}" class="px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 transition">
+                                    <i class="fas fa-download"></i>
+                                </a>
+                            </div>
+                        `;
+                        downloadsList.appendChild(downloadItem);
+                    });
+                    
+                    // Add event listeners to play buttons
+                    document.querySelectorAll('.play-download-btn').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const songId = btn.getAttribute('data-id');
+                            const song = data.songs.find(s => s.id === songId);
+                            if (song) playSong(song);
+                        });
+                    });
+                } else {
+                    downloadsList.innerHTML = '<p class="text-gray-400 text-center py-8">No downloads yet</p>';
+                }
+            } catch (error) {
+                console.error('Failed to load downloads:', error);
+                showNotification('Failed to load downloads', 'error');
+            }
+        }
+
+        // Search Functions
+        async function handleSearchInput() {
+            const query = searchInput.value.trim();
+            
+            if (query.length < 2) {
+                suggestions.classList.add('hidden');
+                return;
+            }
+            
+            try {
+                const data = await apiCall('/api/suggestions', {
+                    method: 'POST',
+                    body: JSON.stringify({ query })
+                });
+                
+                if (data.suggestions && data.suggestions.length > 0) {
+                    suggestionsList.innerHTML = '';
+                    data.suggestions.forEach(suggestion => {
+                        const suggestionItem = document.createElement('div');
+                        suggestionItem.className = 'p-2 rounded-lg hover:bg-white/10 cursor-pointer transition';
+                        suggestionItem.textContent = suggestion;
+                        suggestionItem.addEventListener('click', () => {
+                            searchInput.value = suggestion;
+                            suggestions.classList.add('hidden');
+                            performSearch();
+                        });
+                        suggestionsList.appendChild(suggestionItem);
+                    });
+                    suggestions.classList.remove('hidden');
+                } else {
+                    suggestions.classList.add('hidden');
+                }
+            } catch (error) {
+                suggestions.classList.add('hidden');
+            }
+        }
+
+        async function performSearch() {
+            const query = searchInput.value.trim();
+            
+            if (!query) {
+                showNotification('Please enter a search term', 'error');
+                return;
+            }
+            
+            try {
+                showLoading(`Searching for "${query}"...`);
+                resultsTitle.textContent = `Results for "${query}"`;
+                
+                const data = await apiCall('/api/search', {
+                    method: 'POST',
+                    body: JSON.stringify({ query })
+                });
+                
+                searchResults = data;
+                renderSearchResults();
+                showSection('search');
+                showResultsTab('songs');
+                
+                // Add to search history (frontend only)
+                if (!searchHistory.includes(query)) {
+                    // In a real app, you'd save this to the backend
+                    searchHistory.unshift(query);
+                    if (searchHistory.length > 10) searchHistory.pop();
+                    loadSearchHistory();
+                }
+                
+            } catch (error) {
+                console.error('Search failed:', error);
+                showNotification('Search failed. Please try again.', 'error');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function renderSearchResults() {
+            // Render songs
+            songsResults.innerHTML = '';
+            if (searchResults.songs && searchResults.songs.length > 0) {
+                searchResults.songs.forEach(song => {
+                    const songElement = createSongResultElement(song);
+                    songsResults.appendChild(songElement);
+                });
+            } else {
+                songsResults.innerHTML = '<p class="text-gray-400 text-center py-8">No songs found</p>';
+            }
+            
+            // Render artists
+            artistsResults.innerHTML = '';
+            if (searchResults.artists && searchResults.artists.length > 0) {
+                searchResults.artists.forEach(artist => {
+                    const artistElement = document.createElement('div');
+                    artistElement.className = 'glass-effect rounded-xl p-4 song-card text-center';
+                    artistElement.innerHTML = `
+                        <img src="${artist.thumbnail || ''}" alt="${artist.name}" class="w-24 h-24 rounded-full mx-auto mb-3">
+                        <h3 class="font-bold">${artist.name}</h3>
+                        <p class="text-gray-300 text-sm">Artist</p>
+                        <button class="mt-3 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 transition w-full view-artist-btn" data-id="${artist.id}">
+                            View Artist
+                        </button>
+                    `;
+                    artistsResults.appendChild(artistElement);
+                });
+                
+                // Add event listeners to artist buttons
+                document.querySelectorAll('.view-artist-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const artistId = btn.getAttribute('data-id');
+                        // In a real app, you'd navigate to artist page
+                        showNotification('Artist view not implemented in demo', 'info');
+                    });
+                });
+            } else {
+                artistsResults.innerHTML = '<p class="text-gray-400 text-center py-8">No artists found</p>';
+            }
+            
+            // Render albums
+            albumsResults.innerHTML = '';
+            if (searchResults.albums && searchResults.albums.length > 0) {
+                searchResults.albums.forEach(album => {
+                    const albumElement = document.createElement('div');
+                    albumElement.className = 'glass-effect rounded-xl p-4 song-card';
+                    albumElement.innerHTML = `
+                        <img src="${album.thumbnail || ''}" alt="${album.title}" class="w-full aspect-square rounded-lg mb-3">
+                        <h3 class="font-bold truncate">${album.title}</h3>
+                        <p class="text-gray-300 text-sm truncate">${album.artist}</p>
+                        <p class="text-gray-400 text-xs">${album.year || ''}</p>
+                        <button class="mt-3 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 transition w-full view-album-btn" data-id="${album.id}">
+                            View Album
+                        </button>
+                    `;
+                    albumsResults.appendChild(albumElement);
+                });
+                
+                // Add event listeners to album buttons
+                document.querySelectorAll('.view-album-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const albumId = btn.getAttribute('data-id');
+                        // In a real app, you'd navigate to album page
+                        showNotification('Album view not implemented in demo', 'info');
+                    });
+                });
+            } else {
+                albumsResults.innerHTML = '<p class="text-gray-400 text-center py-8">No albums found</p>';
+            }
+        }
+
+        function createSongResultElement(song) {
+            const element = document.createElement('div');
+            element.className = 'glass-effect rounded-xl p-4 flex items-center justify-between song-card';
+            element.innerHTML = `
+                <div class="flex items-center space-x-4 flex-1">
+                    <img src="${song.thumbnail || ''}" alt="${song.title}" class="w-16 h-16 rounded-lg">
+                    <div class="flex-1">
+                        <div class="font-bold flex items-center">
+                            ${song.title}
+                            ${song.is_explicit ? '<span class="ml-2 px-1 bg-gray-700 text-xs rounded">E</span>' : ''}
+                        </div>
+                        <div class="text-gray-300">${song.artist}</div>
+                        <div class="text-sm text-gray-400 flex items-center space-x-4 mt-1">
+                            <span>${song.duration || '0:00'}</span>
+                            <span>•</span>
+                            <span>${song.views || 'No views'}</span>
+                            ${song.album ? `<span>•</span><span>${song.album}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="flex space-x-2">
+                    <button class="play-btn px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 transition" data-id="${song.id}">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button class="download-btn px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 transition" data-id="${song.id}" data-title="${song.title}" data-artist="${song.artist}" data-thumbnail="${song.thumbnail || ''}">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+            `;
+            
+            // Add event listeners
+            element.querySelector('.play-btn').addEventListener('click', () => playSong(song));
+            element.querySelector('.download-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                downloadSong(song);
+            });
+            
+            return element;
+        }
+
+        function createSongCard(song) {
+            const card = document.createElement('div');
+            card.className = 'glass-effect rounded-xl p-4 song-card cursor-pointer';
+            card.innerHTML = `
+                <img src="${song.thumbnail || ''}" alt="${song.title}" class="w-full aspect-square rounded-lg mb-3 object-cover">
+                <h3 class="font-bold truncate">${song.title}</h3>
+                <p class="text-gray-300 text-sm truncate">${song.artist}</p>
+                <div class="flex justify-between items-center mt-2">
+                    <span class="text-xs text-gray-400">${song.views || 'Popular'}</span>
+                    <button class="play-card-btn p-2 rounded-full bg-purple-600 hover:bg-purple-700 transition" data-id="${song.id}">
+                        <i class="fas fa-play text-xs"></i>
+                    </button>
+                </div>
+            `;
+            
+            card.addEventListener('click', (e) => {
+                if (!e.target.closest('.play-card-btn')) {
+                    // If not clicking the play button, show more details or play
+                    playSong(song);
+                }
+            });
+            
+            card.querySelector('.play-card-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                playSong(song);
+            });
+            
+            return card;
+        }
+
+        // Player Functions
+        async function playSong(song) {
+            try {
+                showLoading('Loading audio...');
+                
+                // Stop current audio if playing
+                if (currentAudio) {
+                    currentAudio.pause();
+                    currentAudio = null;
+                }
+                
+                // Try to get direct stream URL first
+                const streamData = await apiCall(`/api/stream/${song.id}`);
+                
+                if (streamData.success) {
+                    // Use direct stream
+                    currentAudio = new Audio(streamData.streamUrl);
+                } else {
+                    // Fallback: Use proxy
+                    const proxyUrl = `/api/proxy-audio?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${song.id}`)}`;
+                    currentAudio = new Audio(proxyUrl);
+                }
+                
+                currentSong = song;
+                
+                // Set up audio event listeners
+                currentAudio.addEventListener('loadedmetadata', () => {
+                    duration.textContent = formatTime(currentAudio.duration);
+                });
+                
+                currentAudio.addEventListener('timeupdate', () => {
+                    currentTime.textContent = formatTime(currentAudio.currentTime);
+                    const progress = (currentAudio.currentTime / currentAudio.duration) * 100;
+                    progressFill.style.width = `${progress}%`;
+                });
+                
+                currentAudio.addEventListener('ended', () => {
+                    isPlaying = false;
+                    playBtn.innerHTML = '<i class="fas fa-play"></i>';
+                });
+                
+                // Update player UI
+                playerTitle.textContent = song.title;
+                playerArtist.textContent = song.artist;
+                
+                if (song.thumbnail) {
+                    playerThumbnail.src = song.thumbnail;
+                    playerThumbnail.classList.remove('hidden');
+                } else {
+                    playerThumbnail.classList.add('hidden');
+                }
+                
+                // Show player
+                player.classList.remove('hidden');
+                
+                // Play audio
+                await currentAudio.play();
+                isPlaying = true;
+                playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                
+                showNotification(`Now playing: ${song.title}`, 'success');
+                
+            } catch (error) {
+                console.error('Playback failed:', error);
+                showNotification('Playback failed. Trying download instead...', 'error');
+                // Fallback to download
+                downloadSong(song);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function togglePlay() {
+            if (!currentAudio) return;
+            
+            if (isPlaying) {
+                currentAudio.pause();
+                isPlaying = false;
+                playBtn.innerHTML = '<i class="fas fa-play"></i>';
+            } else {
+                currentAudio.play();
+                isPlaying = true;
+                playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+            }
+        }
+
+        function downloadCurrentSong() {
+            if (currentSong) {
+                downloadSong(currentSong);
+            }
+        }
+
+        function formatTime(seconds) {
+            if (isNaN(seconds)) return '0:00';
+            
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        }
+
+        // Download Functions
+        async function downloadSong(song) {
+            try {
+                showLoading(`Downloading ${song.title}...`);
+                
+                const data = await apiCall('/api/download', {
+                    method: 'POST',
+                    body: JSON.stringify({
                         videoId: song.id,
                         title: song.title,
                         artist: song.artist,
                         album: song.album || '',
                         thumbnail: song.thumbnail || '',
                         format: 'mp3'
-                    };
-
-                    showMessage(`⬇️ Starting download: ${song.title}`, 'info');
-
-                    const response = await fetch(`${API_BASE}/api/download`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.error || 'Download failed');
-                    }
-
-                    const data = await response.json();
-                    if (data.status === 'success') {
-                        const cleanFilename = `${song.artist} - ${song.title}.mp3`.replace(/[<>:"/\\|?*]/g, '');
-                        const link = document.createElement('a');
-                        link.href = `${API_BASE}${data.downloadUrl}`;
-                        link.download = cleanFilename;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-
-                        showMessage(`✅ "${song.title}" downloaded!`, 'success');
-                        await Promise.all([loadSongs(), loadArtists()]);
-                    } else {
-                        throw new Error(data.error || 'Download failed');
-                    }
-                } catch (error) {
-                    console.error('Download error:', error);
-                    showMessage(`❌ ${error.message}`, 'error');
-                } finally {
-                    setDownloading(null);
-                }
-            };
-
-            const downloadToComputer = async (songId) => {
-                try {
-                    const response = await fetch(`${API_BASE}/api/download-file/${songId}`);
-                    if (response.ok) {
-                        const blob = await response.blob();
-                        const url = window.URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.style.display = 'none';
-                        a.href = url;
-                        const song = songs.find(s => s.id === songId) || { artist: 'Unknown', title: 'Unknown' };
-                        a.download = `${song.artist} - ${song.title}.mp3`.replace(/[<>:"/\\|?*]/g, '');
-                        document.body.appendChild(a);
-                        a.click();
-                        window.URL.revokeObjectURL(url);
-                        document.body.removeChild(a);
-                        showMessage('📥 Song saved to your computer!', 'success');
-                    } else {
-                        throw new Error('Failed to download file');
-                    }
-                } catch (error) {
-                    console.error('Download to computer failed:', error);
-                    showMessage('Failed to save song', 'error');
-                }
-            };
-
-            const playDownloadedSong = async (songId) => {
-                try {
-                    const song = songs.find(s => s.id === songId);
-                    if (!song) return;
-                    const audioUrl = `${API_BASE}/api/play-song/${songId}`;
-                    setNowPlaying({ ...song, audioUrl });
-                    if (audioRef.current) {
-                        audioRef.current.src = audioUrl;
-                        audioRef.current.load();
-                        audioRef.current.play().catch(e => {
-                            console.log('Auto-play prevented');
-                        });
-                    }
-                    showMessage(`🎵 Playing: ${song.title}`, 'success');
-                } catch (error) {
-                    showMessage('Failed to play song', 'error');
-                }
-            };
-
-            const handleAudioTimeUpdate = () => {
-                if (audioRef.current) {
-                    const progress = (audioRef.current.currentTime / audioRef.current.duration) * 100;
-                    setAudioProgress(progress || 0);
-                }
-            };
-
-            // Add these handler functions to your React component
-const handleExportData = async () => {
-    try {
-        const response = await fetch(`${API_BASE}/api/export-data`);
-        if (response.ok) {
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = `musicgrab_backup_${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            showMessage('✅ Data exported successfully!', 'success');
-        } else {
-            throw new Error('Export failed');
-        }
-    } catch (error) {
-        console.error('Export error:', error);
-        showMessage('Failed to export data', 'error');
-    }
-};
-
-const handleImportData = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    try {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch(`${API_BASE}/api/import-data`, {
-            method: 'POST',
-            body: formData
-        });
-
-        const data = await response.json();
-        if (response.ok && data.success) {
-            showMessage('✅ Data imported successfully!', 'success');
-            // Reload the data
-            await loadSongs();
-            await loadArtists();
-            await loadSearchHistory();
-        } else {
-            throw new Error(data.error || 'Import failed');
-        }
-    } catch (error) {
-        console.error('Import error:', error);
-        showMessage(`❌ ${error.message}`, 'error');
-    }
-    
-    // Reset the file input
-    event.target.value = '';
-};
-
-            const handleAuthenticate = async () => {
-                if (!browserJson.trim()) {
-                    showMessage('Please paste your browser.json content', 'error');
-                    return;
-                }
-
-                setLoading(true);
-                try {
-                    const response = await fetch(`${API_BASE}/api/authenticate`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ browserJson })
-                    });
-
-                    const data = await response.json();
-                    if (response.ok && data.success) {
-                        setUserAuthenticated(true);
-                        localStorage.setItem('userAuthenticated', 'true');
-                        showMessage('✅ Authentication successful!', 'success');
-                        await loadHomeData();
-                        await loadLibraryData();
-                    } else {
-                        throw new Error(data.error || 'Authentication failed');
-                    }
-                } catch (error) {
-                    showMessage(`❌ ${error.message}`, 'error');
-                } finally {
-                    setLoading(false);
-                }
-            };
-
-            const formatViews = (views) => {
-                if (!views || views === 0) return "No views";
+                    })
+                });
                 
-                try {
-                    views = parseInt(views);
-                    if (isNaN(views)) return "No views";
+                if (data.status === 'success') {
+                    showNotification(`Downloaded: ${song.title}`, 'success');
                     
-                    if (views >= 1000000000) {
-                        return `${(views / 1000000000).toFixed(1)}B views`;
-                    } else if (views >= 1000000) {
-                        return `${(views / 1000000000).toFixed(1)}M views`;
-                    } else if (views >= 1000) {
-                        return `${(views / 1000).toFixed(1)}K views`;
-                    } else {
-                        return `${views.toLocaleString()} views`;
+                    // Refresh library and downloads
+                    if (currentSection === 'library') loadLibraryData();
+                    if (currentSection === 'downloads') loadDownloadsData();
+                    
+                    // Automatically play the downloaded song if it's the current song
+                    if (currentSong && currentSong.id === song.id) {
+                        // The song is now in our library, we can play it directly
+                        const downloadUrl = `/downloads/${data.filename}`;
+                        if (currentAudio) {
+                            currentAudio.pause();
+                        }
+                        currentAudio = new Audio(downloadUrl);
+                        currentAudio.play();
+                        isPlaying = true;
+                        playBtn.innerHTML = '<i class="fas fa-pause"></i>';
                     }
-                } catch {
-                    return "No views";
+                } else {
+                    throw new Error(data.error || 'Download failed');
                 }
-            };
+                
+            } catch (error) {
+                console.error('Download failed:', error);
+                showNotification(`Download failed: ${error.message}`, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
 
-            const tabs = [
-                { id: 'home', label: 'Home', icon: 'fas fa-home' },
-                { id: 'search', label: 'Search', icon: 'fas fa-search' },
-                ...(userAuthenticated ? [
-                    { id: 'library-songs', label: 'Library Songs', icon: 'fas fa-music' },
-                    { id: 'library-artists', label: 'Library Artists', icon: 'fas fa-users' },
-                    { id: 'library-albums', label: 'Library Albums', icon: 'fas fa-compact-disc' },
-                    { id: 'library-playlists', label: 'Library Playlists', icon: 'fas fa-list' }
-                ] : []),
-                { id: 'songs', label: 'Your Songs', icon: 'fas fa-download' },
-                { id: 'artists', label: 'Your Artists', icon: 'fas fa-user-friends' },
-                { id: 'settings', label: 'Settings', icon: 'fas fa-cog' }
-            ];
+        // Authentication Functions
+        async function submitAuthentication() {
+            const jsonContent = browserJson.value.trim();
+            
+            if (!jsonContent) {
+                showNotification('Please paste your browser.json content', 'error');
+                return;
+            }
+            
+            try {
+                showLoading('Authenticating...');
+                
+                const data = await apiCall('/api/authenticate', {
+                    method: 'POST',
+                    body: JSON.stringify({ browserJson: jsonContent })
+                });
+                
+                if (data.success) {
+                    showNotification('Successfully authenticated!', 'success');
+                    authModal.classList.add('hidden');
+                    authBtn.innerHTML = '<i class="fas fa-user-check mr-2"></i>Signed In';
+                    browserJson.value = '';
+                    
+                    // Reload home data to get personalized recommendations
+                    loadHomeData();
+                } else {
+                    throw new Error(data.error || 'Authentication failed');
+                }
+                
+            } catch (error) {
+                console.error('Authentication failed:', error);
+                showNotification(`Authentication failed: ${error.message}`, 'error');
+            } finally {
+                hideLoading();
+            }
+        }
 
-            return (
-                <div className="min-h-screen pb-20">
-                    {/* Message Toast */}
-                    {message.text && (
-                        <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg max-w-md ${
-                            message.type === 'error' ? 'bg-red-500 text-white' :
-                            message.type === 'success' ? 'bg-green-500 text-white' :
-                            'bg-blue-500 text-white'
-                        }`}>
-                            {message.text}
-                        </div>
-                    )}
+        // Data Management Functions
+        async function exportData() {
+            try {
+                showLoading('Preparing export...');
+                
+                const response = await fetch('/api/export-data');
+                if (!response.ok) throw new Error('Export failed');
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'musicgrab_export.json';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                showNotification('Data exported successfully', 'success');
+                
+            } catch (error) {
+                console.error('Export failed:', error);
+                showNotification('Export failed', 'error');
+            } finally {
+                hideLoading();
+            }
+        }
 
-                    {/* Audio Player */}
-                    <audio 
-                        ref={audioRef}
-                        onTimeUpdate={handleAudioTimeUpdate}
-                        onEnded={() => setNowPlaying(null)}
-                        className="hidden"
-                    />
-
-                    {/* Now Playing Bar */}
-                    {nowPlaying && (
-                        <div className="fixed bottom-0 left-0 right-0 bg-black/90 text-white p-4 z-40 border-t border-white/20">
-                            <div className="max-w-7xl mx-auto flex items-center justify-between">
-                                <div className="flex items-center gap-4 flex-1">
-                                    <img 
-                                        src={nowPlaying.thumbnail} 
-                                        alt={nowPlaying.title}
-                                        className="w-12 h-12 rounded-lg object-cover"
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                        <h4 className="font-semibold text-sm truncate">{nowPlaying.title}</h4>
-                                        <p className="text-white/70 text-xs truncate">{nowPlaying.artist}</p>
-                                    </div>
-                                </div>
-                                
-                                <div className="flex items-center gap-4 flex-1 justify-center">
-                                    <button 
-                                        onClick={() => audioRef.current && (audioRef.current.currentTime -= 10)}
-                                        className="text-white/80 hover:text-white"
-                                    >
-                                        <i className="fas fa-backward-step text-xl"></i>
-                                    </button>
-                                    <button 
-                                        onClick={() => audioRef.current && (audioRef.current.paused ? audioRef.current.play() : audioRef.current.pause())}
-                                        className="bg-white text-black rounded-full w-10 h-10 flex items-center justify-center hover:bg-white/90"
-                                    >
-                                        <i className={`fas ${audioRef.current && !audioRef.current.paused ? 'fa-pause' : 'fa-play'}`}></i>
-                                    </button>
-                                    <button 
-                                        onClick={() => audioRef.current && (audioRef.current.currentTime += 10)}
-                                        className="text-white/80 hover:text-white"
-                                    >
-                                        <i className="fas fa-forward-step text-xl"></i>
-                                    </button>
-                                </div>
-
-                                <div className="flex items-center gap-4 flex-1 justify-end">
-                                    <div className="w-32">
-                                        <div className="progress-bar">
-                                            <div className="progress-fill" style={{width: `${audioProgress}%`}}></div>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={() => setNowPlaying(null)}
-                                        className="text-white/80 hover:text-white"
-                                    >
-                                        <i className="fas fa-times text-xl"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Header */}
-                    <div className="glass-effect border-b border-white/20 sticky top-0 z-30">
-                        <div className="max-w-7xl mx-auto px-6 py-4">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
-                                        <i className="fas fa-music text-purple-600 text-xl"></i>
-                                    </div>
-                                    <div>
-                                        <h1 className="text-2xl font-bold text-white">MusicGrab Pro</h1>
-                                        <p className="text-white/70 text-sm">YouTube Music Downloader</p>
-                                    </div>
-                                </div>
-                                
-                                {/* Search Bar */}
-                                <div className="flex-1 max-w-2xl mx-8" ref={searchRef}>
-                                    <div className="relative">
-                                        <div className={`bg-white/20 rounded-full transition-all duration-200 ${searchFocused ? 'ring-2 ring-white/50' : ''}`}>
-                                            <div className="flex items-center px-6 py-3">
-                                                <i className="fas fa-search text-white/70 mr-3"></i>
-                                                <input 
-                                                    type="text"
-                                                    value={searchQuery}
-                                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                                    onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                                                    onFocus={() => setSearchFocused(true)}
-                                                    onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
-                                                    placeholder="Search for songs, artists, or albums..."
-                                                    className="flex-1 outline-none text-white placeholder-white/70 bg-transparent text-lg"
-                                                />
-                                                {searchQuery && (
-                                                    <button 
-                                                        onClick={() => {
-                                                            setSearchQuery('');
-                                                            setSearchResults({songs: [], artists: [], albums: []});
-                                                            setShowSuggestions(false);
-                                                        }}
-                                                        className="ml-3 text-white/70 hover:text-white"
-                                                    >
-                                                        <i className="fas fa-times"></i>
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-
-{/* Search Suggestions - UPDATED */}
-{showSuggestions && suggestions.length > 0 && (
-    <div className="suggestions-dropdown">
-        {suggestions.map((suggestion, idx) => (
-            <button
-                key={idx}
-                onClick={() => {
-                    setSearchQuery(suggestion);
-                    handleSearch(suggestion);
-                }}
-                className="w-full px-6 py-3 text-left hover:bg-purple-50 flex items-center gap-3 transition-colors"
-            >
-                <i className="fas fa-search text-purple-500"></i>
-                <span className="text-gray-700 truncate">{suggestion}</span>
-            </button>
-        ))}
-    </div>
-)}
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-4">
-                                    {userAuthenticated && (
-                                        <div className="bg-green-500/20 text-green-300 px-3 py-1 rounded-full text-sm">
-                                            <i className="fas fa-check-circle mr-2"></i>
-                                            Connected
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Navigation */}
-                    <div className="bg-white/10 border-b border-white/20 sticky top-16 z-20">
-                        <div className="max-w-7xl mx-auto px-6">
-                            <div className="flex space-x-1 overflow-x-auto">
-                                {tabs.map(tab => (
-                                    <button
-                                        key={tab.id}
-                                        onClick={() => {
-                                            setActiveTab(tab.id);
-                                            if (tab.id !== 'artist') setArtistPage(null);
-                                            if (tab.id.startsWith('library-')) loadLibraryData();
-                                        }}
-                                        className={`py-4 px-4 font-medium transition-all border-b-2 whitespace-nowrap ${
-                                            activeTab === tab.id 
-                                                ? 'text-white border-white' 
-                                                : 'text-white/70 border-transparent hover:text-white'
-                                        }`}
-                                    >
-                                        <i className={`${tab.icon} mr-2`}></i>
-                                        {tab.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-{/* Main Content */}
-<div className="max-w-7xl mx-auto px-6 py-8">
-    {/* Home Page */}
-    {activeTab === 'home' && (
-        <div className="fade-in">
-            <div className="text-center mb-12">
-                <h1 className="text-4xl font-bold text-white mb-4">
-                    {userAuthenticated ? 'Welcome Back!' : 'Welcome to MusicGrab Pro'}
-                </h1>
-                <p className="text-white/80 text-xl">
-                    {userAuthenticated 
-                        ? 'Your personalized music experience awaits' 
-                        : 'Discover and download your favorite music'
-                    }
-                </p>
-            </div>
-
-            {/* Featured Sections */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-                {homeData.featured.map((item, index) => (
-                    <div key={item.id} className={`bg-gradient-to-br ${item.color} rounded-2xl p-6 text-white hover-lift cursor-pointer`}>
-                        <div className="text-3xl mb-4">
-                            <i className={item.icon}></i>
-                        </div>
-                        <h3 className="font-bold text-lg mb-2">{item.title}</h3>
-                        <p className="text-white/80 text-sm">{item.subtitle}</p>
-                    </div>
-                ))}
-            </div>
-
-            {/* Recommendations */}
-            <div className="mb-8">
-                <h2 className="text-2xl font-bold text-white mb-6">
-                    {userAuthenticated ? 'Recommended For You' : 'Popular Right Now'}
-                </h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                    {homeData.recommendations.map((rec, index) => (
-                        <div key={rec.id} className="bg-white/10 rounded-2xl p-4 hover-lift cursor-pointer backdrop-blur-sm">
-                            <div className="relative mb-3">
-                                <img 
-                                    src={rec.thumbnail} 
-                                    alt={rec.title}
-                                    className="w-full aspect-square object-cover rounded-xl"
-                                />
-                                <div className="play-button-overlay">
-                                    <i className="fas fa-play text-white text-2xl"></i>
-                                </div>
-                            </div>
-                            <h3 className="font-semibold text-white text-sm mb-1 truncate">{rec.title}</h3>
-                            <p className="text-white/70 text-xs truncate">{rec.artist}</p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-    )}
-
-    {/* Search Results */}
-    {activeTab === 'search' && (
-        <div className="fade-in">
-            {loading ? (
-                <div className="text-center py-16">
-                    <div className="animate-spin w-12 h-12 border-4 border-white border-t-transparent rounded-full mx-auto mb-4"></div>
-                    <h3 className="text-xl font-semibold text-white mb-2">Searching...</h3>
-                    <p className="text-white/70">Finding the best results for "{searchQuery}"</p>
-                </div>
-            ) : (
-                <div>
-                    <div className="mb-6">
-                        <h1 className="text-2xl font-bold text-white">
-                            Search Results for: "{searchQuery}"
-                        </h1>
-                    </div>
-
-                    {/* Artists */}
-                    {searchResults.artists && searchResults.artists.length > 0 && (
-                        <div className="mb-8">
-                            <h2 className="text-2xl font-bold text-white mb-4">Artists</h2>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {searchResults.artists.map((artist, index) => (
-                                    <div key={artist.id} className="bg-white/10 rounded-2xl p-4 text-center hover-lift cursor-pointer backdrop-blur-sm" onClick={() => handleArtistClick(artist.id)}>
-                                        <img 
-                                            src={artist.thumbnail} 
-                                            alt={artist.name}
-                                            className="w-20 h-20 rounded-full mx-auto mb-3 object-cover"
-                                        />
-                                        <h3 className="font-semibold text-white text-sm">{artist.name}</h3>
-                                        <p className="text-white/70 text-xs">Artist</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Albums */}
-                    {searchResults.albums && searchResults.albums.length > 0 && (
-                        <div className="mb-8">
-                            <h2 className="text-2xl font-bold text-white mb-4">Albums</h2>
-                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                {searchResults.albums.map((album, index) => (
-                                    <div key={album.id} className="bg-white/10 rounded-2xl p-4 hover-lift cursor-pointer backdrop-blur-sm">
-                                        <img 
-                                            src={album.thumbnail} 
-                                            alt={album.title}
-                                            className="w-full aspect-square object-cover rounded-xl mb-3"
-                                        />
-                                        <h3 className="font-semibold text-white text-sm mb-1 truncate">{album.title}</h3>
-                                        <p className="text-white/70 text-xs truncate">{album.artist}</p>
-                                        {album.year && <p className="text-white/60 text-xs">{album.year}</p>}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Songs */}
-                    {searchResults.songs && searchResults.songs.length > 0 && (
-                        <div>
-                            <h2 className="text-2xl font-bold text-white mb-4">Songs</h2>
-                            <div className="space-y-2">
-                                {searchResults.songs.map((song, index) => (
-                                    <div key={`${song.id}-${index}`} className="bg-white/10 rounded-xl p-4 hover:bg-white/20 transition-all backdrop-blur-sm">
-                                        <div className="flex items-center gap-4">
-                                            <div className="relative flex-shrink-0">
-                                                <img 
-                                                    src={song.thumbnail} 
-                                                    alt={song.title}
-                                                    className="w-12 h-12 rounded-lg object-cover"
-                                                />
-                                                <button
-                                                    onClick={() => handlePlaySong(song)}
-                                                    className="play-button-overlay"
-                                                    title="Play song"
-                                                >
-                                                    <i className="fas fa-play text-white text-sm"></i>
-                                                </button>
-                                            </div>
-                                            
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center mb-1">
-                                                    <h3 className="font-semibold text-white text-base truncate">
-                                                        {song.title}
-                                                    </h3>
-                                                    {song.is_explicit && (
-                                                        <div className="explicit-badge" title="Explicit">
-                                                            E
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                
-                                                <div className="text-sm text-white/70 mb-1">
-                                                    <span className="font-medium">{song.artist}</span>
-                                                    {song.album && <span> • {song.album}</span>}
-                                                </div>
-                                                
-                                                <div className="flex items-center gap-3 text-xs text-white/60 flex-wrap">
-                                                    <span>Duration: {song.duration}</span>
-                                                    <span>•</span>
-                                                    <span>{song.views || 'No views'}</span>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="flex items-center gap-2 flex-shrink-0">
-                                                <button
-                                                    onClick={() => handlePlaySong(song)}
-                                                    className="bg-white/20 text-white p-2 rounded-lg hover:bg-white/30 transition-all flex items-center justify-center"
-                                                    title="Play"
-                                                    style={{ width: '40px', height: '40px' }}
-                                                >
-                                                    <i className="fas fa-play text-sm"></i>
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDownload(song)}
-                                                    disabled={downloading === song.id}
-                                                    className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-                                                        downloading === song.id 
-                                                            ? 'bg-green-500/20 text-green-300 cursor-not-allowed' 
-                                                            : 'bg-white/20 text-white hover:bg-white/30'
-                                                    }`}
-                                                    style={{ height: '40px' }}
-                                                >
-                                                    {downloading === song.id ? (
-                                                        <>
-                                                            <div className="animate-spin w-4 h-4 border-2 border-green-300 border-t-transparent rounded-full"></div>
-                                                            <span className="hidden sm:inline">Downloading...</span>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <i className="fas fa-download"></i>
-                                                            <span className="hidden sm:inline">Download</span>
-                                                        </>
-                                                    )}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* No results */}
-                    {(!searchResults.songs || searchResults.songs.length === 0) && 
-                     (!searchResults.artists || searchResults.artists.length === 0) && 
-                     (!searchResults.albums || searchResults.albums.length === 0) && (
-                        <div className="text-center py-16">
-                            <i className="fas fa-search text-white/40 text-6xl mb-4"></i>
-                            <h3 className="text-xl font-semibold text-white mb-2">No results found</h3>
-                            <p className="text-white/70">Try different keywords or check your spelling</p>
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    )}
-
-    {/* Your Songs Page */}
-    {activeTab === 'songs' && (
-        <div className="fade-in">
-            <h2 className="text-2xl font-bold text-white mb-6">Your Downloaded Songs</h2>
-            {songs.length === 0 ? (
-                <div className="text-center py-16">
-                    <i className="fas fa-music text-white/40 text-6xl mb-4"></i>
-                    <h3 className="text-xl font-semibold text-white mb-2">No songs yet</h3>
-                    <p className="text-white/70">Downloaded songs will appear here</p>
-                </div>
-            ) : (
-                <div className="space-y-2">
-                    {songs.map(song => (
-                        <div key={song.id} className="bg-white/10 rounded-xl p-4 hover:bg-white/20 transition-all backdrop-blur-sm">
-                            <div className="flex items-center gap-4">
-                                <img 
-                                    src={song.thumbnail} 
-                                    alt={song.title}
-                                    className="w-12 h-12 rounded-lg object-cover"
-                                />
-                                <div className="flex-1">
-                                    <h3 className="font-semibold text-white text-lg">{song.title}</h3>
-                                    <div className="text-white/70 text-sm">
-                                        {song.artist} • {song.album} • Downloaded {song.downloaded_at}
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => playDownloadedSong(song.id)}
-                                        className="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-all"
-                                    >
-                                        <i className="fas fa-play mr-2"></i>
-                                        Play
-                                    </button>
-                                    <button
-                                        onClick={() => downloadToComputer(song.id)}
-                                        className="bg-white/20 text-white px-4 py-2 rounded-lg hover:bg-white/30 transition-all"
-                                    >
-                                        <i className="fas fa-download mr-2"></i>
-                                        Download
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    )}
-
-    {/* Your Artists Page */}
-    {activeTab === 'artists' && (
-        <div className="fade-in">
-            <h2 className="text-2xl font-bold text-white mb-6">Your Artists</h2>
-            {Object.keys(artists).length === 0 ? (
-                <div className="text-center py-16">
-                    <i className="fas fa-users text-white/40 text-6xl mb-4"></i>
-                    <h3 className="text-xl font-semibold text-white mb-2">No artists yet</h3>
-                    <p className="text-white/70">Artists from downloaded songs will appear here</p>
-                </div>
-            ) : (
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                    {Object.entries(artists).map(([artistName, songCount]) => (
-                        <div key={artistName} className="bg-white/10 rounded-2xl p-4 text-center hover-lift cursor-pointer backdrop-blur-sm">
-                            <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
-                                <i className="fas fa-user text-white/60 text-2xl"></i>
-                            </div>
-                            <h3 className="font-semibold text-white text-sm mb-1 truncate">{artistName}</h3>
-                            <p className="text-white/70 text-xs">{songCount} {songCount === 1 ? 'song' : 'songs'}</p>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    )}
-
-    {/* Settings Page */}
-    {activeTab === 'settings' && (
-        <div className="fade-in max-w-2xl mx-auto">
-            <h2 className="text-2xl font-bold text-white mb-6">Settings</h2>
-           
-            {/* Authentication Section */}
-            <div className="bg-white/10 rounded-2xl p-6 mb-6 backdrop-blur-sm">
-                <h3 className="text-xl font-semibold text-white mb-4">Authentication</h3>
-                {userAuthenticated ? (
-                    <div className="flex items-center gap-3 text-green-300">
-                        <i className="fas fa-check-circle text-xl"></i>
-                        <p>Connected to YouTube Music</p>
-                    </div>
-                ) : (
-                    <div>
-                        <p className="text-white/70 mb-4">Paste your browser.json content to connect to YouTube Music</p>
-                        <textarea
-                            value={browserJson}
-                            onChange={(e) => setBrowserJson(e.target.value)}
-                            placeholder="Paste browser.json content here..."
-                            className="w-full h-32 p-4 rounded-lg bg-white/20 text-white placeholder-white/50 mb-4 resize-none"
-                        ></textarea>
-                        <button
-                            onClick={handleAuthenticate}
-                            disabled={loading}
-                            className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all disabled:opacity-50"
-                        >
-                            {loading ? (
-                                <>
-                                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full inline-block mr-2"></div>
-                                    Connecting...
-                                </>
-                            ) : (
-                                <>
-                                    <i className="fas fa-link mr-2"></i>
-                                    Connect
-                                </>
-                            )}
-                        </button>
-                    </div>
-                )}
-            </div>
-
-            {/* Data Management Section */}
-            <div className="bg-white/10 rounded-2xl p-6 backdrop-blur-sm">
-                <h3 className="text-xl font-semibold text-white mb-4">Data Management</h3>
-                <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                    <button
-                        onClick={handleExportData}
-                        className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all flex items-center justify-center"
-                    >
-                        <i className="fas fa-download mr-2"></i>
-                        Export Data
-                    </button>
-                    <label className="bg-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/30 transition-all flex items-center justify-center cursor-pointer">
-                        <i className="fas fa-upload mr-2"></i>
-                        Import Data
-                        <input
-                            type="file"
-                            accept=".json"
-                            onChange={handleImportData}
-                            className="hidden"
-                        />
-                    </label>
-                </div>
-                <p className="text-white/70 text-sm">Export or import your downloaded songs and artists data</p>
-               
-                {/* Stats */}
-                <div className="mt-6 pt-6 border-t border-white/20">
-                    <h4 className="text-lg font-semibold text-white mb-3">Your Statistics</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white/10 rounded-lg p-4 text-center">
-                            <div className="text-2xl font-bold text-white mb-1">{songs.length}</div>
-                            <div className="text-white/70 text-sm">Downloaded Songs</div>
-                        </div>
-                        <div className="bg-white/10 rounded-lg p-4 text-center">
-                            <div className="text-2xl font-bold text-white mb-1">{Object.keys(artists).length}</div>
-                            <div className="text-white/70 text-sm">Artists</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    )}
-
-</div>
-);
-
-}
-
-ReactDOM.render(<App />, document.getElementById('app'));
-
-
-
+        async function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            try {
+                showLoading('Importing data...');
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch('/api/import-data', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error('Import failed');
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('Data imported successfully', 'success');
+                    
+                    // Refresh library and downloads
+                    if (currentSection === 'library') loadLibraryData();
+                    if (currentSection === 'downloads') loadDownloadsData();
+                } else {
+                    throw new Error(data.error || 'Import failed');
+                }
+                
+            } catch (error) {
+                console.error('Import failed:', error);
+                showNotification(`Import failed: ${error.message}`, 'error');
+            } finally {
+                hideLoading();
+                // Reset file input
+                importFile.value = '';
+            }
+        }
+    </script>
+</body>
+</html>
