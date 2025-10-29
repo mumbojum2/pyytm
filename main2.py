@@ -1170,7 +1170,8 @@ def direct_download(video_id):
             
             response = requests.get(audio_url, headers=headers, stream=True, timeout=30)
             
-            return Response(
+            # FIX: Use flask.Response instead of just Response
+            return flask.Response(
                 response.iter_content(chunk_size=8192),
                 mimetype='audio/mpeg',
                 headers={
@@ -1182,8 +1183,10 @@ def direct_download(video_id):
     except Exception as e:
         print(f"❌ Direct download error: {e}")
         return jsonify({'error': str(e)}), 500
+        
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
