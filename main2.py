@@ -1,1795 +1,1347 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MusicGrab Pro - YouTube Music Downloader</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        * {
-            font-family: 'Inter', sans-serif;
-        }
-        
-        body {
-            margin: 0;
-            padding: 0;
-            min-height: 100vh;
-            overflow-x: hidden;
-            background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-            background-size: 400% 400%;
-            animation: gradient 15s ease infinite;
-        }
-        
-        .gradient-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            z-index: -1;
-        }
-        
-        @keyframes gradient {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-        
-        .glass-effect {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        .gradient-text {
-            background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        
-        .song-card {
-            transition: all 0.3s ease;
-        }
-        
-        .song-card:hover {
-            transform: translateY(-2px);
-        }
-        
-        .loading-spinner {
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top: 3px solid #fff;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .fade-in {
-            animation: fadeIn 0.3s ease-in;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .progress-bar {
-            height: 4px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 2px;
-            overflow: hidden;
-            cursor: pointer;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);
-            transition: width 0.1s ease;
-        }
-        
-        .text-ellipsis {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        
-        /* Mobile optimizations */
-        @media (max-width: 768px) {
-            .mobile-hidden {
-                display: none;
-            }
-            
-            .mobile-full {
-                width: 100%;
-            }
-            
-            .mobile-padding {
-                padding: 1rem;
-            }
-            
-            .mobile-text-lg {
-                font-size: 1.125rem;
-            }
-            
-            .mobile-player-open {
-                padding-bottom: 120px;
-            }
-        }
-        
-        /* Player states */
-        .player-loading .play-btn i {
-            animation: pulse 1.5s infinite;
-        }
-        
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-        
-        /* Navigation active state */
-        .nav-active {
-            background: rgba(255, 255, 255, 0.2);
-            box-shadow: 0 0 10px rgba(124, 58, 237, 0.5);
-        }
-        
-        /* Scrollbar styling */
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.3);
-            border-radius: 3px;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.5);
-        }
-    </style>
-</head>
-<body class="text-white">
-    <!-- Gradient Overlay -->
-    <div class="gradient-overlay"></div>
+# YouTube Music Downloader - "MusicGrab Pro"
+# ULTRA-FAST Flask Backend with Performance Optimizations
+
+import os
+import json
+import subprocess
+import sys
+from flask import Flask, request, jsonify, send_file, Response
+from flask_cors import CORS
+import threading
+import time
+import re
+import requests
+from urllib.parse import quote
+import urllib.parse
+import base64
+import tempfile
+import signal
+import yt_dlp
+
+app = Flask(__name__, static_folder='static', static_url_path='')
+CORS(app)
+
+# Create directories with absolute paths
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DOWNLOAD_DIR = os.path.join(BASE_DIR, 'downloads')
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+os.makedirs('/home/akiva/pyytm/user_data', exist_ok=True)
+
+# Storage - will be loaded from user data
+songs_db = []
+artists_db = {}
+search_history = []
+browser_json_content = ""
+user_authenticated = False
+
+# NEW: Performance optimizations
+search_cache = {}
+stream_cache = {}
+download_queue = []
+current_downloads = 0
+MAX_CONCURRENT_DOWNLOADS = 2
+CACHE_DURATION = 300  # 5 minutes
+
+# NEW: Playlist functionality
+playlists = {}
+current_playing_context = {
+    'type': None,  # 'playlist', 'search', 'library'
+    'id': None,
+    'songs': [],
+    'current_index': 0
+}
+
+# Load user data at startup
+def load_user_data():
+    """Load user data from files"""
+    global songs_db, artists_db, search_history, playlists
     
-    <!-- Navigation -->
-    <nav class="glass-effect p-4 sticky top-0 z-10">
-        <div class="container mx-auto flex justify-between items-center">
-            <div class="flex items-center space-x-2">
-                <i class="fas fa-music text-xl gradient-text"></i>
-                <h1 class="text-xl font-bold gradient-text mobile-hidden">MusicGrab Pro</h1>
-                <h1 class="text-xl font-bold gradient-text md:hidden">MGP</h1>
-            </div>
-            
-            <div class="flex space-x-2">
-                <button id="homeBtn" class="px-3 py-2 rounded-lg nav-active transition mobile-hidden">
-                    <i class="fas fa-home mr-2"></i>Home
-                </button>
-                <button id="homeBtnMobile" class="p-2 rounded-lg nav-active transition md:hidden">
-                    <i class="fas fa-home"></i>
-                </button>
+    try:
+        if os.path.exists('/home/akiva/pyytm/user_data/songs.json'):
+            with open('/home/akiva/pyytm/user_data/songs.json', 'r') as f:
+                songs_db = json.load(f)
+        
+        if os.path.exists('/home/akiva/pyytm/user_data/artists.json'):
+            with open('/home/akiva/pyytm/user_data/artists.json', 'r') as f:
+                artists_db = json.load(f)
                 
-                <button id="libraryBtn" class="px-3 py-2 rounded-lg hover:bg-white/10 transition mobile-hidden">
-                    <i class="fas fa-heart mr-2"></i>Library
-                </button>
-                <button id="libraryBtnMobile" class="p-2 rounded-lg hover:bg-white/10 transition md:hidden">
-                    <i class="fas fa-heart"></i>
-                </button>
+        if os.path.exists('/home/akiva/pyytm/user_data/search_history.json'):
+            with open('/home/akiva/pyytm/user_data/search_history.json', 'r') as f:
+                search_history = json.load(f)
                 
-                <button id="playlistsBtn" class="px-3 py-2 rounded-lg hover:bg-white/10 transition mobile-hidden">
-                    <i class="fas fa-list mr-2"></i>Playlists
-                </button>
-                <button id="playlistsBtnMobile" class="p-2 rounded-lg hover:bg-white/10 transition md:hidden">
-                    <i class="fas fa-list"></i>
-                </button>
+        if os.path.exists('/home/akiva/pyytm/user_data/playlists.json'):
+            with open('/home/akiva/pyytm/user_data/playlists.json', 'r') as f:
+                playlists = json.load(f)
                 
-                <button id="downloadsBtn" class="px-3 py-2 rounded-lg hover:bg-white/10 transition mobile-hidden">
-                    <i class="fas fa-download mr-2"></i>Downloads
-                </button>
-                <button id="downloadsBtnMobile" class="p-2 rounded-lg hover:bg-white/10 transition md:hidden">
-                    <i class="fas fa-download"></i>
-                </button>
-            </div>
+        print("✅ User data loaded successfully")
+    except Exception as e:
+        print(f"⚠️ Could not load user data: {e}")
+
+def save_user_data():
+    """Save user data to files"""
+    try:
+        with open('/home/akiva/pyytm/user_data/songs.json', 'w') as f:
+            json.dump(songs_db, f)
             
-            <div class="flex items-center space-x-2">
-                <button id="authBtn" class="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition mobile-hidden">
-                    <i class="fas fa-user mr-2"></i>Sign In
-                </button>
-                <button id="authBtnMobile" class="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition md:hidden">
-                    <i class="fas fa-user"></i>
-                </button>
-            </div>
-        </div>
-    </nav>
+        with open('/home/akiva/pyytm/user_data/artists.json', 'w') as f:
+            json.dump(artists_db, f)
+            
+        with open('/home/akiva/pyytm/user_data/search_history.json', 'w') as f:
+            json.dump(search_history, f)
+            
+        with open('/home/akiva/pyytm/user_data/playlists.json', 'w') as f:
+            json.dump(playlists, f)
+            
+        print("💾 User data saved")
+    except Exception as e:
+        print(f"⚠️ Could not save user data: {e}")
 
-    <!-- Main Content -->
-    <main class="container mx-auto p-4 mobile-padding relative z-10 mobile-player-open">
-        <!-- Hero Section -->
-        <section id="heroSection" class="text-center mb-8 mt-4 fade-in">
-            <h1 class="text-3xl md:text-5xl font-bold mb-4 gradient-text">Discover & Download Music</h1>
-            <p class="text-lg md:text-xl text-gray-200 max-w-2xl mx-auto">Find your favorite songs from YouTube Music. Stream instantly or download for offline.</p>
-        </section>
+def sanitize_filename(filename):
+    return re.sub(r'[<>:"/\\|?*]', '', filename)
 
-        <!-- Search Section -->
-        <section id="searchSection" class="mb-8 fade-in">
-            <div class="max-w-2xl mx-auto">
-                <div class="relative">
-                    <input 
-                        type="text" 
-                        id="searchInput" 
-                        placeholder="Search for songs, artists, or albums..." 
-                        class="w-full p-4 rounded-xl glass-effect text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400 transition-all duration-300 text-lg"
-                    >
-                    <button id="searchBtn" class="absolute right-2 top-2 p-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition">
-                        <i class="fas fa-search"></i>
-                    </button>
-                </div>
+def get_youtube_suggestions(query):
+    """Get YouTube search suggestions - OPTIMIZED FAST VERSION"""
+    if not query or len(query) < 2:
+        return []
+
+    try:
+        url = "https://suggestqueries.google.com/complete/search"
+        params = {
+            'client': 'firefox',
+            'q': query,
+            'hl': 'en',
+            'ds': 'yt'
+        }
+
+        # OPTIMIZATION: Shorter timeout and connection pooling
+        response = requests.get(url, params=params, timeout=1.5)  # Reduced from 2s to 1.5s
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
+                suggestions = data[1][:5]
+                print(f"✅ Fast suggestions for '{query}': {suggestions}")
+                return suggestions
                 
-                <!-- Search Suggestions -->
-                <div id="suggestions" class="mt-2 hidden">
-                    <div class="glass-effect rounded-xl p-2">
-                        <div id="suggestionsList" class="space-y-1"></div>
-                    </div>
-                </div>
-                
-                <!-- Search History -->
-                <div id="searchHistory" class="mt-4 hidden">
-                    <h3 class="text-sm font-medium mb-2">Recent Searches</h3>
-                    <div id="historyList" class="flex flex-wrap gap-2"></div>
-                </div>
-            </div>
-        </section>
+    except requests.exceptions.Timeout:
+        print(f"⚠️ Suggestions timeout for: {query}")
+        # Return cached/fallback suggestions immediately on timeout
+        return get_fallback_suggestions(query)
+    except Exception as e:
+        print(f"⚠️ Suggestions error for {query}: {e}")
+    
+    # Fast fallback
+    return get_fallback_suggestions(query)
 
-        <!-- Home Section -->
-        <section id="homeSection" class="fade-in">
-            <!-- Featured Categories -->
-            <div class="mb-8">
-                <h2 class="text-2xl font-bold mb-4 text-center mobile-text-lg">Featured Categories</h2>
-                <div id="featuredGrid" class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <!-- Featured items will be loaded here -->
-                </div>
-            </div>
-            
-            <!-- Recommendations -->
-            <div>
-                <h2 class="text-2xl font-bold mb-4 text-center mobile-text-lg">Recommended For You</h2>
-                <div id="recommendationsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                    <!-- Recommendations will be loaded here -->
-                </div>
-            </div>
-        </section>
+def get_fallback_suggestions(query):
+    """Fast fallback suggestions without external API calls"""
+    # Common music-related suggestions
+    music_suggestions = [
+        f"{query} songs",
+        f"{query} lyrics", 
+        f"{query} official video",
+        f"{query} album",
+        f"{query} music video",
+        f"{query} live",
+        f"{query} cover",
+        f"{query} remix"
+    ]
+    return music_suggestions[:5]
 
-        <!-- Search Results Section -->
-        <section id="searchResultsSection" class="hidden fade-in">
-            <div class="flex justify-between items-center mb-4">
-                <h2 id="resultsTitle" class="text-2xl font-bold mobile-text-lg text-ellipsis pr-2">Search Results</h2>
-                <button id="backToHome" class="px-4 py-2 rounded-lg glass-effect hover:bg-white/10 transition flex-shrink-0">
-                    <i class="fas fa-arrow-left mr-2 mobile-hidden"></i>
-                    <span class="md:hidden">Back</span>
-                    <span class="mobile-hidden">Back to Home</span>
-                </button>
-            </div>
+def parse_view_count(view_str):
+    """Parse view count string into integer - SIMPLIFIED"""
+    if not view_str:
+        return 0
+    
+    try:
+        # Clean the string
+        view_str = str(view_str).strip().upper().replace(',', '').replace(' ', '')
+        
+        # Return 0 if empty or "No views"
+        if not view_str or 'NO' in view_str:
+            return 0
             
-            <!-- Tabs -->
-            <div class="mb-4">
-                <div class="flex space-x-4 border-b border-white/20">
-                    <button id="songsTab" class="tab-button px-4 py-2 border-b-2 border-purple-500 font-medium">Songs</button>
-                    <button id="artistsTab" class="tab-button px-4 py-2 text-gray-300 hover:text-white transition">Artists</button>
-                    <button id="albumsTab" class="tab-button px-4 py-2 text-gray-300 hover:text-white transition">Albums</button>
-                </div>
-            </div>
+        # Handle numeric strings
+        if view_str.isdigit():
+            return int(view_str)
+        
+        # Handle K, M, B suffixes
+        if 'K' in view_str:
+            num = float(re.sub(r'[^\d.]', '', view_str))
+            return int(num * 1000)
+        elif 'M' in view_str:
+            num = float(re.sub(r'[^\d.]', '', view_str))
+            return int(num * 1000000)
+        elif 'B' in view_str:
+            num = float(re.sub(r'[^\d.]', '', view_str))
+            return int(num * 1000000000)
             
-            <!-- Results Content -->
-            <div id="songsResults" class="space-y-3">
-                <!-- Songs will be loaded here -->
-            </div>
+        # Try to extract any numbers
+        numbers = re.findall(r'\d+', view_str)
+        if numbers:
+            return int(''.join(numbers))
             
-            <div id="artistsResults" class="hidden grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                <!-- Artists will be loaded here -->
-            </div>
-            
-            <div id="albumsResults" class="hidden grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                <!-- Albums will be loaded here -->
-            </div>
-        </section>
+        return 0
+        
+    except Exception as e:
+        print(f"View count parsing error for '{view_str}': {e}")
+        return 0
 
-        <!-- Library Section -->
-        <section id="librarySection" class="hidden fade-in">
-            <h2 class="text-2xl font-bold mb-4 text-center mobile-text-lg">Your Library</h2>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <!-- Downloaded Songs -->
-                <div class="glass-effect rounded-xl p-4">
-                    <div class="flex justify-between items-center mb-3">
-                        <h3 class="text-lg font-bold">Downloaded Songs</h3>
-                        <span id="songsCount" class="bg-purple-600 px-2 py-1 rounded-full text-sm">0</span>
-                    </div>
-                    <div id="librarySongs" class="space-y-2 max-h-80 overflow-y-auto">
-                        <!-- Downloaded songs will be loaded here -->
-                    </div>
-                </div>
-                
-                <!-- Favorite Artists -->
-                <div class="glass-effect rounded-xl p-4">
-                    <div class="flex justify-between items-center mb-3">
-                        <h3 class="text-lg font-bold">Favorite Artists</h3>
-                        <span id="artistsCount" class="bg-purple-600 px-2 py-1 rounded-full text-sm">0</span>
-                    </div>
-                    <div id="libraryArtists" class="space-y-2 max-h-80 overflow-y-auto">
-                        <!-- Favorite artists will be loaded here -->
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Data Management -->
-            <div class="glass-effect rounded-xl p-6 max-w-2xl mx-auto">
-                <h3 class="text-xl font-bold mb-4 text-center">Data Management</h3>
-                <div class="flex space-x-4 justify-center">
-                    <button id="exportBtn" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition">
-                        <i class="fas fa-file-export mr-2"></i>Export Data
-                    </button>
-                    <button id="importBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition">
-                        <i class="fas fa-file-import mr-2"></i>Import Data
-                    </button>
-                    <input type="file" id="importFile" class="hidden" accept=".json">
-                </div>
-            </div>
-        </section>
+def format_views(views):
+    """Format view count into human readable format"""
+    if not views or views == 0:
+        return "No views"
+    
+    try:
+        views = int(views)
+    except:
+        return "No views"
+        
+    if views >= 1000000000:
+        return f"{views / 1000000000:.1f}B views"
+    elif views >= 1000000:
+        return f"{views / 1000000:.1f}M views"
+    elif views >= 1000:
+        return f"{views / 1000:.1f}K views"
+    else:
+        return f"{views:,} views"
 
-        <!-- Playlists Section -->
-        <section id="playlistsSection" class="hidden fade-in">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-2xl font-bold mobile-text-lg">Your Playlists</h2>
-                <button id="createPlaylistBtn" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition">
-                    <i class="fas fa-plus mr-2"></i>New Playlist
-                </button>
-            </div>
-            
-            <div id="playlistsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <!-- Playlists will be loaded here -->
-            </div>
-            
-            <!-- Current Playlist View -->
-            <div id="currentPlaylistSection" class="hidden mt-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 id="currentPlaylistName" class="text-xl font-bold">Playlist Name</h3>
-                    <button id="backToPlaylists" class="px-4 py-2 rounded-lg glass-effect hover:bg-white/10 transition">
-                        <i class="fas fa-arrow-left mr-2"></i>Back to Playlists
-                    </button>
-                </div>
-                <div id="currentPlaylistSongs" class="space-y-3">
-                    <!-- Playlist songs will be loaded here -->
-                </div>
-            </div>
-        </section>
+def get_cached_search(query):
+    """Get cached search results"""
+    now = time.time()
+    if query in search_cache:
+        data, timestamp = search_cache[query]
+        if now - timestamp < CACHE_DURATION:
+            return data
+    return None
 
-        <!-- Downloads Section -->
-        <section id="downloadsSection" class="hidden fade-in">
-            <h2 class="text-2xl font-bold mb-4 text-center mobile-text-lg">Your Downloads</h2>
-            
-            <div id="downloadsList" class="space-y-3">
-                <!-- Downloads will be loaded here -->
-            </div>
-        </section>
+def cache_search(query, data):
+    """Cache search results"""
+    search_cache[query] = (data, time.time())
 
-        <!-- Player -->
-        <div id="player" class="fixed bottom-0 left-0 right-0 glass-effect p-3 hidden z-20">
-            <div class="container mx-auto">
-                <!-- Loading State -->
-                <div id="playerLoading" class="text-center text-sm text-gray-300 mb-2 hidden">
-                    <i class="fas fa-spinner fa-spin mr-2"></i>
-                    <span id="loadingSongText">Loading song...</span>
-                </div>
-                
-                <div class="flex items-center justify-between">
-                    <!-- Song Info -->
-                    <div class="flex items-center space-x-3 w-1/4 min-w-0">
-                        <img id="playerThumbnail" src="" alt="" class="w-10 h-10 rounded-lg hidden">
-                        <div class="min-w-0 flex-1">
-                            <div id="playerTitle" class="font-medium text-ellipsis text-sm">Song Title</div>
-                            <div id="playerArtist" class="text-xs text-gray-300 text-ellipsis">Artist Name</div>
-                        </div>
-                    </div>
+def get_personalized_recommendations():
+    """Get FAST personalized recommendations"""
+    global browser_json_content, user_authenticated
+    
+    if not user_authenticated or not browser_json_content:
+        return get_fast_popular_recommendations()
+    
+    try:
+        # Fast path with timeout
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Recommendations timed out")
+        
+        # Set up timeout (Unix-like systems only)
+        try:
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(5)  # 5 second timeout
+        except (AttributeError, ValueError):
+            # Windows doesn't support SIGALRM, continue without timeout
+            pass
+        
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                f.write(browser_json_content)
+                browser_file = f.name
+            
+            from ytmusicapi import YTMusic
+            ytmusic = YTMusic(browser_file)
+            
+            home_feed = ytmusic.get_home()
+            recommendations = []
+            
+            for shelf in home_feed[:6]:  # Limit shelves for speed
+                for content in shelf.get('contents', [])[:4]:  # Limit contents
+                    if 'title' in content:
+                        video_id = content.get('videoId')
+                        if video_id:
+                            recommendations.append({
+                                'id': video_id,
+                                'title': content['title'],
+                                'artist': content.get('subtitle', 'YouTube Music'),
+                                'thumbnail': content['thumbnails'][-1]['url'] if content.get('thumbnails') else "",
+                                'type': 'song',
+                                'url': f"https://www.youtube.com/watch?v={video_id}",
+                                'views': 'Popular'
+                            })
+            
+            os.unlink(browser_file)
+            # Cancel timeout if set
+            try:
+                signal.alarm(0)
+            except (AttributeError, ValueError):
+                pass
+            return recommendations[:15]  # Limit results
+            
+        except TimeoutError:
+            print("Recommendations timed out, using fallback")
+            return get_fast_popular_recommendations()
+        
+    except Exception as e:
+        print(f"Personalized recommendations error: {e}")
+        # Cancel timeout if set
+        try:
+            signal.alarm(0)
+        except (AttributeError, ValueError):
+            pass
+        return get_fast_popular_recommendations()
+
+def get_fast_popular_recommendations():
+    """Get popular music FAST with fallback"""
+    try:
+        from ytmusicapi import YTMusic
+        yt = YTMusic()
+        
+        # Direct trending search with limit
+        search_results = yt.search('popular music', filter='songs', limit=8)
+        recommendations = []
+        
+        for track in search_results[:8]:  # Limit results
+            try:
+                video_id = track.get('videoId')
+                if video_id:
+                    artists_list = track.get('artists', [])
+                    artist_names = [artist.get('name', '') for artist in artists_list if isinstance(artist, dict)]
+                    artist_str = ", ".join(artist_names) if artist_names else 'Unknown Artist'
                     
-                    <!-- Controls -->
-                    <div class="flex flex-col items-center w-2/4">
-                        <div class="flex items-center space-x-4 mb-1">
-                            <button id="prevBtn" class="text-gray-300 hover:text-white p-2">
-                                <i class="fas fa-step-backward"></i>
-                            </button>
-                            <button id="playBtn" class="bg-white text-purple-600 rounded-full w-8 h-8 flex items-center justify-center hover:bg-gray-200 transition">
-                                <i class="fas fa-play text-xs"></i>
-                            </button>
-                            <button id="nextBtn" class="text-gray-300 hover:text-white p-2">
-                                <i class="fas fa-step-forward"></i>
-                            </button>
-                        </div>
+                    thumbnails = track.get('thumbnails', [])
+                    thumbnail_url = thumbnails[-1].get('url', '') if thumbnails else ""
+                    
+                    recommendations.append({
+                        'id': video_id,
+                        'title': track.get('title', 'Unknown Track'),
+                        'artist': artist_str,
+                        'thumbnail': thumbnail_url,
+                        'type': 'song',
+                        'url': f"https://www.youtube.com/watch?v={video_id}",
+                        'views': 'Popular'
+                    })
+            except Exception:
+                continue
+        
+        return recommendations if recommendations else get_fallback_recommendations()
+    except Exception as e:
+        print(f"Popular recommendations error: {e}")
+        return get_fallback_recommendations()
+
+def get_fallback_recommendations():
+    return [
+        {'id': '1', 'title': 'Today\'s Top Hits', 'artist': 'Various Artists', 'thumbnail': '', 'type': 'playlist', 'url': '', 'views': 'Popular'},
+        {'id': '2', 'title': 'Pop Rising', 'artist': 'Popular Pop Music', 'thumbnail': '', 'type': 'playlist', 'url': '', 'views': 'Trending'},
+        {'id': '3', 'title': 'RapCaviar', 'artist': 'Hip Hop & Rap', 'thumbnail': '', 'type': 'playlist', 'url': '', 'views': 'Popular'},
+        {'id': '4', 'title': 'Mood Booster', 'artist': 'Feel Good Hits', 'thumbnail': '', 'type': 'playlist', 'url': '', 'views': 'Popular'}
+    ]
+
+def fast_youtube_search(query, max_results=10):
+    print(f"🔍 ULTRA-FAST Searching for: '{query}'")
+    if not query:
+        return {'songs': [], 'artists': [], 'albums': []}
+
+    try:
+        from ytmusicapi import YTMusic
+        yt = YTMusic()
+        
+        songs = []
+        artists = []
+        albums = []
+        
+        # PARALLEL searching for maximum speed
+        def search_songs():
+            nonlocal songs
+            try:
+                songs_results = yt.search(query, filter='songs', limit=max_results)
+                for song in songs_results:
+                    try:
+                        video_id = song.get('videoId', '')
+                        if not video_id:
+                            continue
+                            
+                        song_artists = song.get('artists', [])
+                        artists_str = ", ".join([artist.get('name', 'Unknown') for artist in song_artists]) if song_artists else 'Unknown Artist'
                         
-                        <div class="w-full flex items-center space-x-2">
-                            <span id="currentTime" class="text-xs text-gray-300">0:00</span>
-                            <div class="progress-bar flex-1" id="progressBar">
-                                <div id="progressFill" class="progress-fill" style="width: 0%"></div>
-                            </div>
-                            <span id="duration" class="text-xs text-gray-300">0:00</span>
-                        </div>
-                    </div>
+                        thumbnail_url = ""
+                        if song.get('thumbnails'):
+                            thumbnail_url = song['thumbnails'][-1]['url'] if len(song['thumbnails']) > 1 else song['thumbnails'][0]['url']
+                        
+                        raw_views = song.get('views', '')
+                        views = parse_view_count(raw_views)
+                        
+                        songs.append({
+                            'id': video_id,
+                            'title': song.get('title', 'Unknown Title'),
+                            'url': f"https://www.youtube.com/watch?v={video_id}",
+                            'duration': song.get('duration', '0:00'),
+                            'artist': artists_str,
+                            'album': song.get('album', {}).get('name', '') if song.get('album') else '',
+                            'thumbnail': thumbnail_url,
+                            'views': format_views(views),
+                            'is_explicit': any(word in song.get('title', '').lower() for word in ['explicit', 'clean']),
+                            'raw_views': views
+                        })
+                    except Exception as song_error:
+                        continue
+            except Exception:
+                pass
+        
+        def search_artists():
+            nonlocal artists
+            try:
+                artists_results = yt.search(query, filter='artists', limit=4)
+                for artist in artists_results:
+                    try:
+                        artists.append({
+                            'id': artist.get('browseId', ''),
+                            'name': artist.get('artist', 'Unknown Artist'),
+                            'thumbnail': artist['thumbnails'][-1]['url'] if artist.get('thumbnails') else "",
+                            'type': 'artist'
+                        })
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+        
+        def search_albums():
+            nonlocal albums
+            try:
+                albums_results = yt.search(query, filter='albums', limit=4)
+                for album in albums_results:
+                    try:
+                        albums.append({
+                            'id': album.get('browseId', ''),
+                            'title': album.get('title', 'Unknown Album'),
+                            'artist': album.get('artists', [{}])[0].get('name', '') if album.get('artists') else 'Unknown Artist',
+                            'year': album.get('year', ''),
+                            'thumbnail': album['thumbnails'][-1]['url'] if album.get('thumbnails') else "",
+                            'type': 'album'
+                        })
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+        
+        # Run searches in parallel threads
+        threads = [
+            threading.Thread(target=search_songs),
+            threading.Thread(target=search_artists),
+            threading.Thread(target=search_albums)
+        ]
+        
+        for thread in threads:
+            thread.start()
+        
+        for thread in threads:
+            thread.join(timeout=5)  # 5 second timeout for each
+        
+        print(f"🎯 ULTRA-FAST Search complete: {len(songs)} songs, {len(artists)} artists, {len(albums)} albums")
+        return {
+            'songs': songs[:max_results],
+            'artists': artists,
+            'albums': albums
+        }
+        
+    except Exception as e:
+        print(f"❌ Search function failed: {e}")
+        return {'songs': [], 'artists': [], 'albums': []}
+
+def add_metadata_to_file(filepath, title, artist, album, thumbnail_url=None):
+    """Add metadata to downloaded MP3 file"""
+    try:
+        from mutagen import File
+        from mutagen.id3 import ID3, TIT2, TPE1, TALB, APIC
+        
+        if not os.path.exists(filepath):
+            return
+        
+        try:
+            audio = ID3(filepath)
+        except:
+            audio = ID3()
+        
+        # Add basic metadata
+        audio["TIT2"] = TIT2(encoding=3, text=title)
+        audio["TPE1"] = TPE1(encoding=3, text=artist)
+        if album:
+            audio["TALB"] = TALB(encoding=3, text=album)
+        
+        # Add album art
+        if thumbnail_url:
+            try:
+                response = requests.get(thumbnail_url, timeout=5)  # Reduced timeout
+                if response.status_code == 200:
+                    # Remove existing APIC frames
+                    for key in list(audio.keys()):
+                        if key.startswith('APIC'):
+                            del audio[key]
                     
-                    <!-- Actions -->
-                    <div class="flex items-center justify-end space-x-2 w-1/4">
-                        <button id="addToPlaylistBtn" class="text-gray-300 hover:text-white p-2" title="Add to Playlist">
-                            <i class="fas fa-plus"></i>
-                        </button>
-                        <button id="downloadCurrentBtn" class="text-gray-300 hover:text-white p-2" title="Download">
-                            <i class="fas fa-download"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
+                    audio["APIC"] = APIC(
+                        encoding=3,
+                        mime='image/jpeg',
+                        type=3,
+                        desc='Cover',
+                        data=response.content
+                    )
+            except Exception as e:
+                print(f"⚠️ Could not add thumbnail: {e}")
+        
+        audio.save(filepath)
+        
+    except Exception as e:
+        print(f"⚠️ Metadata error: {e}")
 
-    <!-- Playlist Creation Modal -->
-    <div id="playlistModal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-30 hidden">
-        <div class="glass-effect rounded-xl p-6 max-w-md w-full mx-4">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold">Create New Playlist</h3>
-                <button id="closePlaylistModal" class="text-gray-300 hover:text-white">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            
-            <div class="mb-4">
-                <label class="block text-sm font-medium mb-2">Playlist Name</label>
-                <input 
-                    type="text" 
-                    id="playlistNameInput" 
-                    placeholder="My Awesome Playlist" 
-                    class="w-full p-3 rounded-lg bg-white/10 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                >
-            </div>
-            
-            <div class="flex justify-end space-x-3">
-                <button id="cancelPlaylist" class="px-4 py-2 rounded-lg glass-effect hover:bg-white/10 transition">
-                    Cancel
-                </button>
-                <button id="createPlaylist" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition">
-                    Create
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Add to Playlist Modal -->
-    <div id="addToPlaylistModal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-30 hidden">
-        <div class="glass-effect rounded-xl p-6 max-w-md w-full mx-4">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold">Add to Playlist</h3>
-                <button id="closeAddToPlaylistModal" class="text-gray-300 hover:text-white">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            
-            <div id="playlistsSelect" class="mb-4 max-h-60 overflow-y-auto">
-                <!-- Playlists will be listed here -->
-            </div>
-            
-            <div class="flex justify-end space-x-3">
-                <button id="cancelAddToPlaylist" class="px-4 py-2 rounded-lg glass-effect hover:bg-white/10 transition">
-                    Cancel
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Authentication Modal -->
-    <div id="authModal" class="fixed inset-0 bg-black/70 flex items-center justify-center z-30 hidden">
-        <div class="glass-effect rounded-xl p-6 max-w-md w-full mx-4">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold">Sign In to YouTube Music</h3>
-                <button id="closeAuthModal" class="text-gray-300 hover:text-white">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            
-            <p class="text-gray-300 mb-4">
-                To get personalized recommendations, sign in with your YouTube Music account.
-            </p>
-            
-            <div class="mb-4">
-                <label class="block text-sm font-medium mb-2">Paste browser.json content:</label>
-                <textarea 
-                    id="browserJson" 
-                    rows="8" 
-                    class="w-full p-3 rounded-lg bg-white/10 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                    placeholder='Paste your browser.json content here...'
-                ></textarea>
-            </div>
-            
-            <div class="flex justify-end space-x-3">
-                <button id="cancelAuth" class="px-4 py-2 rounded-lg glass-effect hover:bg-white/10 transition">
-                    Cancel
-                </button>
-                <button id="submitAuth" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition">
-                    Sign In
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Loading Overlay -->
-    <div id="loadingOverlay" class="fixed inset-0 bg-black/70 flex items-center justify-center z-30 hidden">
-        <div class="text-center glass-effect p-6 rounded-xl">
-            <div class="loading-spinner mx-auto mb-3"></div>
-            <p id="loadingText" class="text-white">Loading...</p>
-        </div>
-    </div>
-
-    <script>
-        // Global variables
-        let currentAudio = null;
-        let currentSong = null;
-        let isPlaying = false;
-        let currentSection = 'home';
-        let searchResults = { songs: [], artists: [], albums: [] };
-        let librarySongs = [];
-        let libraryArtists = [];
-        let searchHistory = [];
-        let playlists = {};
-        let currentPlaylist = null;
-        let currentPlaylistSongs = [];
-        let currentPlayingContext = {
-            type: null,
-            id: null,
-            songs: [],
-            currentIndex: 0
-        };
-
-        // DOM Elements
-        const searchInput = document.getElementById('searchInput');
-        const searchBtn = document.getElementById('searchBtn');
-        const suggestions = document.getElementById('suggestions');
-        const suggestionsList = document.getElementById('suggestionsList');
-        const searchHistoryContainer = document.getElementById('searchHistory');
-        const historyList = document.getElementById('historyList');
+def get_audio_stream_url(video_id):
+    """Get direct audio stream URL for INSTANT playback - UPDATED"""
+    try:
+        # Updated settings for SABR streaming
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+            'socket_timeout': 10,
+            'noplaylist': True,
+        }
         
-        const homeSection = document.getElementById('homeSection');
-        const searchResultsSection = document.getElementById('searchResultsSection');
-        const librarySection = document.getElementById('librarySection');
-        const playlistsSection = document.getElementById('playlistsSection');
-        const downloadsSection = document.getElementById('downloadsSection');
-        const heroSection = document.getElementById('heroSection');
-        const currentPlaylistSection = document.getElementById('currentPlaylistSection');
-        
-        // Navigation buttons
-        const homeBtn = document.getElementById('homeBtn');
-        const homeBtnMobile = document.getElementById('homeBtnMobile');
-        const libraryBtn = document.getElementById('libraryBtn');
-        const libraryBtnMobile = document.getElementById('libraryBtnMobile');
-        const playlistsBtn = document.getElementById('playlistsBtn');
-        const playlistsBtnMobile = document.getElementById('playlistsBtnMobile');
-        const downloadsBtn = document.getElementById('downloadsBtn');
-        const downloadsBtnMobile = document.getElementById('downloadsBtnMobile');
-        const backToHome = document.getElementById('backToHome');
-        const backToPlaylists = document.getElementById('backToPlaylists');
-        
-        const featuredGrid = document.getElementById('featuredGrid');
-        const recommendationsGrid = document.getElementById('recommendationsGrid');
-        
-        const songsTab = document.getElementById('songsTab');
-        const artistsTab = document.getElementById('artistsTab');
-        const albumsTab = document.getElementById('albumsTab');
-        
-        const songsResults = document.getElementById('songsResults');
-        const artistsResults = document.getElementById('artistsResults');
-        const albumsResults = document.getElementById('albumsResults');
-        const resultsTitle = document.getElementById('resultsTitle');
-        
-        const authBtn = document.getElementById('authBtn');
-        const authBtnMobile = document.getElementById('authBtnMobile');
-        const authModal = document.getElementById('authModal');
-        const closeAuthModal = document.getElementById('closeAuthModal');
-        const cancelAuth = document.getElementById('cancelAuth');
-        const submitAuth = document.getElementById('submitAuth');
-        const browserJson = document.getElementById('browserJson');
-        
-        const librarySongsContainer = document.getElementById('librarySongs');
-        const libraryArtistsContainer = document.getElementById('libraryArtists');
-        const songsCount = document.getElementById('songsCount');
-        const artistsCount = document.getElementById('artistsCount');
-        
-        const downloadsList = document.getElementById('downloadsList');
-        
-        const playlistsList = document.getElementById('playlistsList');
-        const createPlaylistBtn = document.getElementById('createPlaylistBtn');
-        const currentPlaylistName = document.getElementById('currentPlaylistName');
-        const currentPlaylistSongsContainer = document.getElementById('currentPlaylistSongs');
-        
-        // Player elements
-        const player = document.getElementById('player');
-        const playerLoading = document.getElementById('playerLoading');
-        const loadingSongText = document.getElementById('loadingSongText');
-        const playerThumbnail = document.getElementById('playerThumbnail');
-        const playerTitle = document.getElementById('playerTitle');
-        const playerArtist = document.getElementById('playerArtist');
-        const playBtn = document.getElementById('playBtn');
-        const prevBtn = document.getElementById('prevBtn');
-        const nextBtn = document.getElementById('nextBtn');
-        const downloadCurrentBtn = document.getElementById('downloadCurrentBtn');
-        const addToPlaylistBtn = document.getElementById('addToPlaylistBtn');
-        const currentTime = document.getElementById('currentTime');
-        const duration = document.getElementById('duration');
-        const progressFill = document.getElementById('progressFill');
-        const progressBar = document.getElementById('progressBar');
-        
-        // Modal elements
-        const playlistModal = document.getElementById('playlistModal');
-        const closePlaylistModal = document.getElementById('closePlaylistModal');
-        const cancelPlaylist = document.getElementById('cancelPlaylist');
-        const createPlaylist = document.getElementById('createPlaylist');
-        const playlistNameInput = document.getElementById('playlistNameInput');
-        
-        const addToPlaylistModal = document.getElementById('addToPlaylistModal');
-        const closeAddToPlaylistModal = document.getElementById('closeAddToPlaylistModal');
-        const cancelAddToPlaylist = document.getElementById('cancelAddToPlaylist');
-        const playlistsSelect = document.getElementById('playlistsSelect');
-        
-        const loadingOverlay = document.getElementById('loadingOverlay');
-        const loadingText = document.getElementById('loadingText');
-
-        // Export/Import
-        const exportBtn = document.getElementById('exportBtn');
-        const importBtn = document.getElementById('importBtn');
-        const importFile = document.getElementById('importFile');
-
-        // Event Listeners
-        document.addEventListener('DOMContentLoaded', () => {
-            loadHomeData();
-            loadSearchHistory();
-            loadPlaylists();
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
             
-            // Navigation
-            homeBtn.addEventListener('click', () => showSection('home'));
-            homeBtnMobile.addEventListener('click', () => showSection('home'));
-            libraryBtn.addEventListener('click', () => showSection('library'));
-            libraryBtnMobile.addEventListener('click', () => showSection('library'));
-            playlistsBtn.addEventListener('click', () => showSection('playlists'));
-            playlistsBtnMobile.addEventListener('click', () => showSection('playlists'));
-            downloadsBtn.addEventListener('click', () => showSection('downloads'));
-            downloadsBtnMobile.addEventListener('click', () => showSection('downloads'));
-            backToHome.addEventListener('click', () => showSection('home'));
-            backToPlaylists.addEventListener('click', () => showPlaylistsList());
-            
-            // Search
-            searchInput.addEventListener('input', handleSearchInput);
-            searchBtn.addEventListener('click', performSearch);
-            searchInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') performSearch();
-            });
-            
-            // Tabs
-            songsTab.addEventListener('click', () => showResultsTab('songs'));
-            artistsTab.addEventListener('click', () => showResultsTab('artists'));
-            albumsTab.addEventListener('click', () => showResultsTab('albums'));
-            
-            // Authentication
-            authBtn.addEventListener('click', () => authModal.classList.remove('hidden'));
-            authBtnMobile.addEventListener('click', () => authModal.classList.remove('hidden'));
-            closeAuthModal.addEventListener('click', () => authModal.classList.add('hidden'));
-            cancelAuth.addEventListener('click', () => authModal.classList.add('hidden'));
-            submitAuth.addEventListener('click', submitAuthentication);
-            
-            // Playlists
-            createPlaylistBtn.addEventListener('click', () => playlistModal.classList.remove('hidden'));
-            closePlaylistModal.addEventListener('click', () => playlistModal.classList.add('hidden'));
-            cancelPlaylist.addEventListener('click', () => playlistModal.classList.add('hidden'));
-            createPlaylist.addEventListener('click', createNewPlaylist);
-            
-            closeAddToPlaylistModal.addEventListener('click', () => addToPlaylistModal.classList.add('hidden'));
-            cancelAddToPlaylist.addEventListener('click', () => addToPlaylistModal.classList.add('hidden'));
-            addToPlaylistBtn.addEventListener('click', showAddToPlaylistModal);
-            
-            // Player
-            playBtn.addEventListener('click', togglePlay);
-            prevBtn.addEventListener('click', playPreviousSong);
-            nextBtn.addEventListener('click', playNextSong);
-            downloadCurrentBtn.addEventListener('click', downloadCurrentSong);
-            
-            // Progress bar seeking
-            progressBar.addEventListener('click', seekAudio);
-            
-            // Export/Import
-            exportBtn.addEventListener('click', exportData);
-            importBtn.addEventListener('click', () => importFile.click());
-            importFile.addEventListener('change', importData);
-            
-            // Close modals when clicking outside
-            document.addEventListener('click', (e) => {
-                if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
-                    suggestions.classList.add('hidden');
-                }
+            # Try multiple methods to get URL
+            if 'url' in info:
+                return info['url']
+            elif 'formats' in info:
+                # Find any working audio format
+                audio_formats = [f for f in info['formats'] if f.get('vcodec') == 'none' and f.get('acodec') != 'none']
                 
-                if (e.target === playlistModal) {
-                    playlistModal.classList.add('hidden');
-                }
+                if audio_formats:
+                    # Just get the first working format
+                    for fmt in audio_formats:
+                        if fmt.get('url'):
+                            return fmt['url']
+            
+        return None
+    except Exception as e:
+        print(f"Audio stream error: {e}")
+        return None
+
+# NEW: Download queue system
+def process_download_queue():
+    """Process download queue in background"""
+    global current_downloads
+    
+    if not download_queue or current_downloads >= MAX_CONCURRENT_DOWNLOADS:
+        return
+    
+    # Get next download
+    download_item = download_queue.pop(0)
+    current_downloads += 1
+    
+    # Start download in background thread
+    thread = threading.Thread(target=process_single_download, args=(download_item,))
+    thread.daemon = True
+    thread.start()
+
+def process_single_download(download_item):
+    """Process a single download item"""
+    global current_downloads
+    
+    try:
+        # Update status to downloading
+        download_item['status'] = 'downloading'
+        
+        # Call the download function with fast mode
+        result = download_internal(
+            download_item['video_id'],
+            download_item['title'],
+            download_item['artist'],
+            download_item['album'],
+            download_item['thumbnail'],
+            download_item['format'],
+            fast_mode=download_item.get('fast', True)
+        )
+        
+        # Update status based on result
+        if result.get('status') == 'success':
+            download_item['status'] = 'completed'
+            download_item['filename'] = result.get('filename')
+        else:
+            download_item['status'] = 'failed'
+            download_item['error'] = result.get('error')
+            
+    except Exception as e:
+        download_item['status'] = 'failed'
+        download_item['error'] = str(e)
+    finally:
+        current_downloads -= 1
+        # Process next in queue
+        process_download_queue()
+
+def download_internal(video_id, title, artist, album, thumbnail_url, format, fast_mode=False):
+    """Internal download function with fast mode support"""
+    # Clean filename
+    sanitized_title = "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip()
+    sanitized_artist = "".join(c for c in artist if c.isalnum() or c in (" ", "-", "_")).strip()
+    filename = f"{sanitized_artist} - {sanitized_title}.mp3"
+    file_path = os.path.join(DOWNLOAD_DIR, filename)
+
+    # Check if file exists (cache hit)
+    if os.path.exists(file_path):
+        print(f"✅ Cache hit for {filename}")
+        # Only add metadata if not in fast mode
+        if not fast_mode:
+            add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
+        songs_db.append({
+            'id': video_id,
+            'title': title,
+            'artist': artist,
+            'album': album,
+            'filename': filename,
+            'thumbnail': thumbnail_url,
+            'downloaded_at': time.strftime('%Y-%m-%d %H:%M:%S')
+        })
+        artists_db[artist] = artists_db.get(artist, 0) + 1
+        save_user_data()
+        return {
+            'status': 'success',
+            'downloadUrl': f"/downloads/{filename}",
+            'filename': filename
+        }
+
+    # ULTRA-FAST download settings
+    if fast_mode:
+        # MINIMAL settings for maximum speed
+        ydl_opts = {
+            'format': 'bestaudio[filesize<50M]',  # Limit file size for speed
+            'outtmpl': file_path.replace('.mp3', ''),
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '128',  # Lower quality = faster
+            }],
+            'writethumbnail': False,  # Skip thumbnail
+            'embedthumbnail': False,  # Skip embedding
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            'nooverwrites': True,
+            'noprogress': True,
+            'socket_timeout': 30,
+            'retries': 3,
+        }
+    else:
+        # Standard fast settings
+        ydl_opts = {
+            'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio',
+            'outtmpl': file_path.replace('.mp3', '.%(ext)s'),
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'writethumbnail': True,
+            'embedthumbnail': True,
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            'socket_timeout': 30,
+        }
+
+    try:
+        print(f"🚀 Starting {'FAST ' if fast_mode else ''}download for: {title}")
+        start_time = time.time()
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+        
+        download_time = time.time() - start_time
+        print(f"✅ Downloaded {filename} in {download_time:.1f} seconds")
+
+        # Only add metadata if not in fast mode
+        if not fast_mode:
+            add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
+
+        # Update user data
+        songs_db.append({
+            'id': video_id,
+            'title': title,
+            'artist': artist,
+            'album': album,
+            'filename': filename,
+            'thumbnail': thumbnail_url,
+            'downloaded_at': time.strftime('%Y-%m-%d %H:%M:%S')
+        })
+        artists_db[artist] = artists_db.get(artist, 0) + 1
+        save_user_data()
+
+        return {
+            'status': 'success',
+            'downloadUrl': f"/downloads/{filename}",
+            'filename': filename
+        }
+    except Exception as e:
+        print(f"Download error: {e}")
+        return {'error': str(e)}
+
+# NEW: Playlist functionality
+@app.route('/api/playlists', methods=['GET', 'POST'])
+def handle_playlists():
+    """Get all playlists or create new playlist"""
+    if request.method == 'GET':
+        return jsonify({'playlists': playlists})
+    
+    # POST - Create new playlist
+    data = request.get_json()
+    playlist_name = data.get('name', 'New Playlist')
+    
+    playlist_id = str(len(playlists) + 1)
+    playlists[playlist_id] = {
+        'id': playlist_id,
+        'name': playlist_name,
+        'songs': [],
+        'created_at': time.strftime('%Y-%m-%d %H:%M:%S')
+    }
+    
+    save_user_data()
+    return jsonify({'success': True, 'playlist': playlists[playlist_id]})
+
+@app.route('/api/playlists/<playlist_id>', methods=['GET', 'PUT', 'DELETE'])
+def handle_playlist(playlist_id):
+    """Get, update, or delete specific playlist"""
+    if playlist_id not in playlists:
+        return jsonify({'error': 'Playlist not found'}), 404
+    
+    if request.method == 'GET':
+        return jsonify({'playlist': playlists[playlist_id]})
+    
+    elif request.method == 'PUT':
+        data = request.get_json()
+        if 'name' in data:
+            playlists[playlist_id]['name'] = data['name']
+        if 'songs' in data:
+            playlists[playlist_id]['songs'] = data['songs']
+        save_user_data()
+        return jsonify({'success': True, 'playlist': playlists[playlist_id]})
+    
+    elif request.method == 'DELETE':
+        del playlists[playlist_id]
+        save_user_data()
+        return jsonify({'success': True})
+
+@app.route('/api/playlists/<playlist_id>/songs', methods=['POST'])
+def add_song_to_playlist(playlist_id):
+    """Add song to playlist"""
+    if playlist_id not in playlists:
+        return jsonify({'error': 'Playlist not found'}), 404
+    
+    data = request.get_json()
+    song = data.get('song')
+    
+    if song:
+        # Check if song already exists in playlist
+        if not any(s.get('id') == song.get('id') for s in playlists[playlist_id]['songs']):
+            playlists[playlist_id]['songs'].append(song)
+            save_user_data()
+            return jsonify({'success': True, 'playlist': playlists[playlist_id]})
+        else:
+            return jsonify({'success': False, 'error': 'Song already in playlist'})
+    
+    return jsonify({'error': 'No song provided'}), 400
+
+@app.route('/api/playlists/<playlist_id>/songs/<song_id>', methods=['DELETE'])
+def remove_song_from_playlist(playlist_id, song_id):
+    """Remove song from playlist"""
+    if playlist_id not in playlists:
+        return jsonify({'error': 'Playlist not found'}), 404
+    
+    playlists[playlist_id]['songs'] = [s for s in playlists[playlist_id]['songs'] if s.get('id') != song_id]
+    save_user_data()
+    return jsonify({'success': True, 'playlist': playlists[playlist_id]})
+
+@app.route('/api/current-context', methods=['POST'])
+def set_current_context():
+    """Set current playing context (playlist, search results, etc.)"""
+    global current_playing_context
+    
+    data = request.get_json()
+    context_type = data.get('type')
+    context_id = data.get('id')
+    songs = data.get('songs', [])
+    
+    current_playing_context = {
+        'type': context_type,
+        'id': context_id,
+        'songs': songs,
+        'current_index': 0
+    }
+    
+    return jsonify({'success': True, 'context': current_playing_context})
+
+@app.route('/api/next-song/<current_id>')
+def get_next_song(current_id):
+    """Get next song in current context"""
+    global current_playing_context
+    
+    if not current_playing_context['songs']:
+        return jsonify({'next_song': None})
+    
+    # Find current index
+    current_index = -1
+    for i, song in enumerate(current_playing_context['songs']):
+        if song.get('id') == current_id:
+            current_index = i
+            break
+    
+    if current_index == -1 or current_index >= len(current_playing_context['songs']) - 1:
+        return jsonify({'next_song': None})
+    
+    next_song = current_playing_context['songs'][current_index + 1]
+    current_playing_context['current_index'] = current_index + 1
+    
+    return jsonify({'next_song': next_song})
+
+@app.route('/api/previous-song/<current_id>')
+def get_previous_song(current_id):
+    """Get previous song in current context"""
+    global current_playing_context
+    
+    if not current_playing_context['songs']:
+        return jsonify({'previous_song': None})
+    
+    # Find current index
+    current_index = -1
+    for i, song in enumerate(current_playing_context['songs']):
+        if song.get('id') == current_id:
+            current_index = i
+            break
+    
+    if current_index <= 0:
+        return jsonify({'previous_song': None})
+    
+    previous_song = current_playing_context['songs'][current_index - 1]
+    current_playing_context['current_index'] = current_index - 1
+    
+    return jsonify({'previous_song': previous_song})
+
+# Load user data at startup
+load_user_data()
+
+@app.route('/')
+def index():
+    return app.send_static_file('index.html')
+
+@app.route('/api/home')
+def home():
+    """Homepage with personalized recommendations"""
+    try:
+        recommendations = get_personalized_recommendations()
+        featured = [
+            {'id': 'top-charts', 'title': 'Top Charts', 'subtitle': 'Global hits', 'type': 'chart', 'icon': 'fas fa-chart-line', 'color': 'from-purple-500 to-pink-500'},
+            {'id': 'new-releases', 'title': 'New Releases', 'subtitle': 'Fresh music', 'type': 'new', 'icon': 'fas fa-star', 'color': 'from-blue-500 to-cyan-500'},
+            {'id': 'mood-mixes', 'title': 'Mood Mixes', 'subtitle': 'Perfect vibes', 'type': 'mix', 'icon': 'fas fa-random', 'color': 'from-green-500 to-emerald-500'},
+            {'id': 'trending', 'title': 'Trending Now', 'subtitle': 'Going viral', 'type': 'trending', 'icon': 'fas fa-fire', 'color': 'from-orange-500 to-red-500'}
+        ]
+        
+        return jsonify({
+            'recommendations': recommendations,
+            'featured': featured,
+            'authenticated': user_authenticated
+        })
+    except Exception as e:
+        return jsonify({
+            'recommendations': get_fallback_recommendations(),
+            'featured': [],
+            'authenticated': False
+        })
+
+@app.route('/api/search', methods=['POST'])
+def search():
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No JSON data provided'}), 400
+        
+    query = data.get('query', '').strip()
+    if not query:
+        return jsonify({'error': 'No query provided'}), 400
+
+    try:
+        # Check cache first
+        cached_results = get_cached_search(query)
+        if cached_results:
+            print(f"✅ CACHE HIT for: '{query}'")
+            return jsonify(cached_results)
+        
+        print(f"🔍 API Search called for: '{query}'")
+        results = fast_youtube_search(query, 10)
+        
+        # Cache the results
+        cache_search(query, results)
+        
+        print(f"✅ API Search completed for: '{query}'")
+        return jsonify(results)
+    except Exception as e:
+        print(f"❌ API Search failed for '{query}': {e}")
+        return jsonify({'error': f'Search failed: {str(e)}'}), 500
+
+@app.route('/api/suggestions', methods=['POST'])
+def suggestions():
+    """Get search suggestions - WORKING VERSION"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'suggestions': []})
+        
+    query = data.get('query', '').strip()
+    if len(query) < 2:
+        return jsonify({'suggestions': []})
+        
+    try:
+        suggestions_list = get_youtube_suggestions(query)
+        return jsonify({'suggestions': suggestions_list[:5]})
+    except Exception as e:
+        print(f"Suggestions error: {e}")
+        return jsonify({'suggestions': []})
+
+@app.route('/api/search-history')
+def get_search_history():
+    """Get user's search history"""
+    return jsonify({'history': search_history[:10]})
+
+# NEW: Get audio stream for native playback
+@app.route('/api/stream/<video_id>')
+def get_audio_stream(video_id):
+    """Get direct audio stream URL for native playback"""
+    try:
+        stream_url = get_audio_stream_url(video_id)
+        if stream_url:
+            return jsonify({
+                'success': True,
+                'streamUrl': stream_url,
+                'type': 'direct'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Could not get audio stream'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# NEW: Proxy audio stream for CORS
+@app.route('/api/proxy-audio')
+def proxy_audio():
+    """Proxy audio stream to avoid CORS issues"""
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'error': 'No URL provided'}), 400
+    
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Range': request.headers.get('Range', ''),
+        }
+        
+        response = requests.get(url, headers=headers, stream=True, timeout=30)
+        
+        return_response = Response(
+            response=response.iter_content(chunk_size=8192),
+            status=response.status_code,
+            headers=dict(response.headers),
+            mimetype=response.headers.get('content-type', 'audio/mpeg')
+        )
+        
+        return return_response
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# NEW: Enhanced view count endpoint
+@app.route('/api/views/<video_id>')
+def get_views(video_id):
+    """Get accurate view count for a video using the enhanced method"""
+    try:
+        from ytmusicapi import YTMusic
+        yt = YTMusic()
+        
+        # Search for the specific video to get accurate view count
+        results = yt.search(video_id, filter='videos', limit=1)
+        
+        if not results:
+            return jsonify({'views': 0, 'error': 'Video not found'})
+        
+        # Get the first result (should be our video)
+        item = results[0]
+        views = item.get('views', '0')
+        
+        parsed_views = parse_view_count(views)
+        
+        return jsonify({
+            'views': parsed_views,
+            'formatted': format_views(parsed_views),
+            'raw': views
+        })
+        
+    except Exception as e:
+        print(f"View count error for {video_id}: {e}")
+        return jsonify({'views': 0, 'error': str(e)})
+
+# NEW: Download queue endpoints
+@app.route('/api/queue-download', methods=['POST'])
+def queue_download():
+    """Add download to queue"""
+    data = request.get_json()
+    video_id = data.get('videoId')
+    title = data.get('title', 'Unknown')
+    artist = data.get('artist', 'Unknown')
+    
+    if not video_id:
+        return jsonify({'error': 'No videoId provided'}), 400
+    
+    # Add to queue
+    download_item = {
+        'video_id': video_id,
+        'title': title,
+        'artist': artist,
+        'album': data.get('album', ''),
+        'thumbnail': data.get('thumbnail', ''),
+        'format': data.get('format', 'mp3'),
+        'fast': data.get('fast', True),
+        'queued_at': time.time(),
+        'status': 'queued'
+    }
+    
+    download_queue.append(download_item)
+    
+    # Start processing if not already running
+    if current_downloads < MAX_CONCURRENT_DOWNLOADS:
+        process_download_queue()
+    
+    return jsonify({
+        'status': 'queued',
+        'position': len(download_queue),
+        'message': f'"{title}" added to download queue'
+    })
+
+@app.route('/api/download-status')
+def download_status():
+    """Get current download status"""
+    return jsonify({
+        'queue': download_queue,
+        'current_downloads': current_downloads,
+        'active_downloads': [item for item in download_queue if item.get('status') in ['downloading']]
+    })
+
+# Original download endpoint (kept for compatibility)
+@app.route('/api/download', methods=['POST'])
+def download():
+    data = request.get_json()
+    video_id = data.get('videoId')
+    title = data.get('title', 'Unknown')
+    artist = data.get('artist', 'Unknown')
+    album = data.get('album', '')
+    thumbnail_url = data.get('thumbnail', '')
+    format = data.get('format', 'mp3')
+    fast_mode = data.get('fast', False)
+
+    if not video_id:
+        return jsonify({'error': 'No videoId provided'}), 400
+
+    result = download_internal(video_id, title, artist, album, thumbnail_url, format, fast_mode)
+    
+    if 'error' in result:
+        return jsonify({'error': result['error']}), 500
+    else:
+        return jsonify(result)
+
+@app.route('/api/play-song/<song_id>')
+def play_song(song_id):
+    """Serve song file for playback"""
+    song = next((s for s in songs_db if s['id'] == song_id), None)
+    if not song:
+        return jsonify({'error': 'Song not found'}), 404
+        
+    filepath = os.path.join('/home/akiva/pyytm/downloads', song['filename'])
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
+        
+    return send_file(filepath)
+
+@app.route('/api/songs')
+def get_songs():
+    return jsonify({'songs': songs_db})
+
+@app.route('/api/artists')
+def get_artists():
+    return jsonify({'artists': artists_db})
+
+@app.route('/downloads/<filename>')
+def serve_download(filename):
+    """Serve temporary download file"""
+    filepath = os.path.join('/home/akiva/pyytm/downloads', filename)
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
+    
+    return send_file(filepath, as_attachment=True, download_name=filename)
+
+@app.route('/api/download-file/<song_id>')
+def download_file(song_id):
+    """Download song to computer"""
+    song = next((s for s in songs_db if s['id'] == song_id), None)
+    if not song:
+        return jsonify({'error': 'Song not found'}), 404
+        
+    filepath = os.path.join('/home/akiva/pyytm/downloads', song['filename'])
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'File not found'}), 404
+        
+    download_name = f"{sanitize_filename(song['artist'])} - {sanitize_filename(song['title'])}.mp3"
+    
+    return send_file(filepath, as_attachment=True, download_name=download_name)
+
+@app.route('/api/direct-download/<video_id>')
+def direct_download(video_id):
+    """Stream download directly to user's computer - FIXED"""
+    try:
+        # Use settings that work with YouTube's SABR streaming
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'quiet': False,  # Set to False to see what's happening
+            'no_warnings': False,
+            'extract_flat': False,
+            'socket_timeout': 30,
+            'retries': 3,
+        }
+        
+        print(f"🔧 Starting direct download for: {video_id}")
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+            title = info.get('title', 'audio')
+            artist = info.get('uploader', 'Unknown Artist')
+            
+            # Clean filename
+            sanitized_title = "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip()
+            sanitized_artist = "".join(c for c in artist if c.isalnum() or c in (" ", "-", "_")).strip()
+            filename = f"{sanitized_artist} - {sanitized_title}.mp3"
+            
+            print(f"📄 Filename: {filename}")
+            print(f"🎵 Title: {title}")
+            print(f"🎤 Artist: {artist}")
+            
+            # Get direct audio URL
+            audio_url = None
+            
+            # Method 1: Try direct URL first
+            if 'url' in info:
+                audio_url = info['url']
+                print("✅ Using direct URL from info")
+            
+            # Method 2: Try formats
+            if not audio_url and 'formats' in info:
+                # Find audio-only formats
+                audio_formats = [f for f in info['formats'] if f.get('vcodec') == 'none' and f.get('acodec') != 'none']
+                print(f"🔍 Found {len(audio_formats)} audio formats")
                 
-                if (e.target === addToPlaylistModal) {
-                    addToPlaylistModal.classList.add('hidden');
-                }
-                
-                if (e.target === authModal) {
-                    authModal.classList.add('hidden');
-                }
-            });
-        });
-
-        // API Functions
-        async function apiCall(endpoint, options = {}) {
-            try {
-                const response = await fetch(endpoint, {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...options.headers
-                    },
-                    ...options
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`API error: ${response.status}`);
-                }
-                
-                return await response.json();
-            } catch (error) {
-                console.error('API call failed:', error);
-                showNotification('An error occurred. Please try again.', 'error');
-                throw error;
-            }
-        }
-
-        // UI Functions
-        function showSection(section) {
-            // Hide all sections
-            homeSection.classList.add('hidden');
-            searchResultsSection.classList.add('hidden');
-            librarySection.classList.add('hidden');
-            playlistsSection.classList.add('hidden');
-            downloadsSection.classList.add('hidden');
-            heroSection.classList.add('hidden');
-            currentPlaylistSection.classList.add('hidden');
-            
-            // Remove active state from all nav buttons
-            document.querySelectorAll('nav button').forEach(btn => {
-                btn.classList.remove('nav-active');
-            });
-            
-            // Show selected section
-            if (section === 'home') {
-                homeSection.classList.remove('hidden');
-                heroSection.classList.remove('hidden');
-                homeBtn.classList.add('nav-active');
-                homeBtnMobile.classList.add('nav-active');
-                currentSection = 'home';
-            } else if (section === 'search') {
-                searchResultsSection.classList.remove('hidden');
-                currentSection = 'search';
-            } else if (section === 'library') {
-                librarySection.classList.remove('hidden');
-                libraryBtn.classList.add('nav-active');
-                libraryBtnMobile.classList.add('nav-active');
-                loadLibraryData();
-                currentSection = 'library';
-            } else if (section === 'playlists') {
-                playlistsSection.classList.remove('hidden');
-                playlistsBtn.classList.add('nav-active');
-                playlistsBtnMobile.classList.add('nav-active');
-                loadPlaylists();
-                currentSection = 'playlists';
-            } else if (section === 'downloads') {
-                downloadsSection.classList.remove('hidden');
-                downloadsBtn.classList.add('nav-active');
-                downloadsBtnMobile.classList.add('nav-active');
-                loadDownloadsData();
-                currentSection = 'downloads';
-            }
-        }
-
-        function showPlaylistsList() {
-            currentPlaylistSection.classList.add('hidden');
-            playlistsList.classList.remove('hidden');
-            createPlaylistBtn.classList.remove('hidden');
-        }
-
-        function showCurrentPlaylist(playlist) {
-            currentPlaylist = playlist;
-            currentPlaylistName.textContent = playlist.name;
-            currentPlaylistSongs = playlist.songs || [];
-            
-            playlistsList.classList.add('hidden');
-            createPlaylistBtn.classList.add('hidden');
-            currentPlaylistSection.classList.remove('hidden');
-            
-            renderPlaylistSongs();
-        }
-
-        function showResultsTab(tab) {
-            // Update tab buttons
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.classList.remove('border-purple-500', 'font-medium');
-                btn.classList.add('text-gray-300');
-            });
-            
-            // Hide all result sections
-            songsResults.classList.add('hidden');
-            artistsResults.classList.add('hidden');
-            albumsResults.classList.add('hidden');
-            
-            // Show selected tab
-            if (tab === 'songs') {
-                songsTab.classList.add('border-purple-500', 'font-medium');
-                songsTab.classList.remove('text-gray-300');
-                songsResults.classList.remove('hidden');
-            } else if (tab === 'artists') {
-                artistsTab.classList.add('border-purple-500', 'font-medium');
-                artistsTab.classList.remove('text-gray-300');
-                artistsResults.classList.remove('hidden');
-            } else if (tab === 'albums') {
-                albumsTab.classList.add('border-purple-500', 'font-medium');
-                albumsTab.classList.remove('text-gray-300');
-                albumsResults.classList.remove('hidden');
-            }
-        }
-
-        function showLoading(message = 'Loading...') {
-            loadingText.textContent = message;
-            loadingOverlay.classList.remove('hidden');
-        }
-
-        function hideLoading() {
-            loadingOverlay.classList.add('hidden');
-        }
-
-        function showPlayerLoading(message = 'Loading song...') {
-            loadingSongText.textContent = message;
-            playerLoading.classList.remove('hidden');
-            player.classList.add('player-loading');
-        }
-
-        function hidePlayerLoading() {
-            playerLoading.classList.add('hidden');
-            player.classList.remove('player-loading');
-        }
-
-        function showNotification(message, type = 'info') {
-            // Create notification element
-            const notification = document.createElement('div');
-            notification.className = `fixed top-4 right-4 p-4 rounded-lg z-40 fade-in glass-effect ${
-                type === 'error' ? 'border-l-4 border-red-500' : 
-                type === 'success' ? 'border-l-4 border-green-500' : 'border-l-4 border-blue-500'
-            }`;
-            notification.innerHTML = `
-                <div class="flex items-center">
-                    <i class="fas fa-${type === 'error' ? 'exclamation-triangle' : type === 'success' ? 'check-circle' : 'info-circle'} mr-2 ${
-                        type === 'error' ? 'text-red-400' : 
-                        type === 'success' ? 'text-green-400' : 'text-blue-400'
-                    }"></i>
-                    <span>${message}</span>
-                </div>
-            `;
-            
-            document.body.appendChild(notification);
-            
-            // Remove after 3 seconds
-            setTimeout(() => {
-                notification.classList.add('opacity-0', 'transition-opacity', 'duration-300');
-                setTimeout(() => {
-                    if (document.body.contains(notification)) {
-                        document.body.removeChild(notification);
-                    }
-                }, 300);
-            }, 3000);
-        }
-
-        // Data Loading Functions
-        async function loadHomeData() {
-            try {
-                showLoading('Loading recommendations...');
-                const data = await apiCall('/api/home');
-                
-                // Render featured items
-                featuredGrid.innerHTML = '';
-                if (data.featured && data.featured.length > 0) {
-                    data.featured.forEach(item => {
-                        const featuredItem = document.createElement('div');
-                        featuredItem.className = 'glass-effect rounded-xl p-4 song-card cursor-pointer text-center';
-                        featuredItem.innerHTML = `
-                            <div class="flex items-center justify-center w-12 h-12 rounded-lg ${item.color} mb-3 mx-auto">
-                                <i class="${item.icon} text-white text-xl"></i>
-                            </div>
-                            <h3 class="font-bold text-sm">${item.title}</h3>
-                            <p class="text-gray-300 text-xs">${item.subtitle}</p>
-                        `;
-                        featuredItem.addEventListener('click', () => {
-                            searchInput.value = item.title;
-                            performSearch();
-                        });
-                        featuredGrid.appendChild(featuredItem);
-                    });
-                }
-                
-                // Render recommendations
-                recommendationsGrid.innerHTML = '';
-                if (data.recommendations && data.recommendations.length > 0) {
-                    data.recommendations.forEach(song => {
-                        const songCard = createSongCard(song);
-                        recommendationsGrid.appendChild(songCard);
-                    });
-                }
-                
-            } catch (error) {
-                console.error('Failed to load home data:', error);
-            } finally {
-                hideLoading();
-            }
-        }
-
-        async function loadSearchHistory() {
-            try {
-                const data = await apiCall('/api/search-history');
-                if (data.history && data.history.length > 0) {
-                    searchHistory = data.history;
-                    searchHistoryContainer.classList.remove('hidden');
-                    historyList.innerHTML = '';
+                if audio_formats:
+                    # Sort by quality
+                    audio_formats.sort(key=lambda x: x.get('abr', 0) or 0, reverse=True)
                     
-                    data.history.forEach(term => {
-                        const historyItem = document.createElement('button');
-                        historyItem.className = 'px-3 py-1 rounded-full glass-effect text-sm hover:bg-white/10 transition';
-                        historyItem.textContent = term;
-                        historyItem.addEventListener('click', () => {
-                            searchInput.value = term;
-                            performSearch();
-                        });
-                        historyList.appendChild(historyItem);
-                    });
-                } else {
-                    searchHistoryContainer.classList.add('hidden');
+                    for i, fmt in enumerate(audio_formats[:5]):  # Try top 5
+                        if fmt.get('url'):
+                            audio_url = fmt['url']
+                            print(f"✅ Using format {i+1}: {fmt.get('ext')} - {fmt.get('abr')}kbps")
+                            break
+            
+            if not audio_url:
+                print("❌ No audio URL found, using fallback")
+                # Fallback: Use the first available format
+                if 'formats' in info and info['formats']:
+                    audio_url = info['formats'][0].get('url')
+                    print(f"🔄 Fallback to first format: {info['formats'][0].get('ext')}")
+            
+            if not audio_url:
+                return jsonify({'error': 'Could not extract audio stream'}), 500
+            
+            print(f"🔗 Audio URL obtained, streaming...")
+            
+            # Stream directly to user's browser for download
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Referer': 'https://www.youtube.com/',
+            }
+            
+            response = requests.get(audio_url, headers=headers, stream=True, timeout=30)
+            
+            return Response(
+                response.iter_content(chunk_size=8192),
+                mimetype='audio/mpeg',
+                headers={
+                    'Content-Disposition': f'attachment; filename="{filename}"',
+                    'Content-Type': 'audio/mpeg'
                 }
-            } catch (error) {
-                console.error('Failed to load search history:', error);
-                searchHistoryContainer.classList.add('hidden');
-            }
-        }
+            )
+            
+    except Exception as e:
+        print(f"❌ Direct download error: {e}")
+        return jsonify({'error': str(e)}), 500
 
-        async function loadPlaylists() {
-            try {
-                const data = await apiCall('/api/playlists');
-                playlists = data.playlists || {};
-                renderPlaylists();
-            } catch (error) {
-                console.error('Failed to load playlists:', error);
-                playlists = {};
-            }
-        }
+@app.route('/api/debug-suggestions', methods=['POST'])
+def debug_suggestions():
+    """Debug endpoint to test suggestions"""
+    data = request.get_json()
+    query = data.get('query', '')
+    
+    print(f"🔍 DEBUG: Getting suggestions for: '{query}'")
+    
+    # Test the suggestions function directly
+    suggestions = get_youtube_suggestions(query)
+    
+    print(f"🔍 DEBUG: Raw suggestions: {suggestions}")
+    print(f"🔍 DEBUG: Suggestions type: {type(suggestions)}")
+    print(f"🔍 DEBUG: Suggestions length: {len(suggestions)}")
+    
+    return jsonify({
+        'query': query,
+        'suggestions': suggestions,
+        'suggestions_count': len(suggestions),
+        'suggestions_type': str(type(suggestions))
+    })
 
-        function renderPlaylists() {
-            playlistsList.innerHTML = '';
-            
-            if (Object.keys(playlists).length === 0) {
-                playlistsList.innerHTML = `
-                    <div class="col-span-full text-center py-8">
-                        <i class="fas fa-list text-4xl text-gray-400 mb-3"></i>
-                        <p class="text-gray-400">No playlists yet</p>
-                        <p class="text-gray-500 text-sm">Create your first playlist to get started</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            Object.values(playlists).forEach(playlist => {
-                const playlistElement = document.createElement('div');
-                playlistElement.className = 'glass-effect rounded-xl p-4 song-card cursor-pointer';
-                playlistElement.innerHTML = `
-                    <div class="flex items-center space-x-3">
-                        <div class="w-12 h-12 rounded-lg bg-purple-600 flex items-center justify-center">
-                            <i class="fas fa-list text-white"></i>
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <h3 class="font-bold text-ellipsis">${playlist.name}</h3>
-                            <p class="text-gray-300 text-sm">${playlist.songs.length} songs</p>
-                        </div>
-                    </div>
-                `;
-                playlistElement.addEventListener('click', () => showCurrentPlaylist(playlist));
-                playlistsList.appendChild(playlistElement);
-            });
-        }
+@app.route('/api/artist/<artist_id>')
+def get_artist(artist_id):
+    """Get artist details and songs"""
+    try:
+        from ytmusicapi import YTMusic
+        yt = YTMusic()
+        
+        # Get artist information
+        artist = yt.get_artist(artist_id)
+        
+        # Get artist's songs
+        artist_songs = yt.get_artist_albums(artist_id, params="Eg-KAQwIABAAGAEgACgAMAI%3D")
+        
+        return jsonify({
+            'artist': artist,
+            'songs': artist_songs
+        })
+    except Exception as e:
+        print(f"Artist error: {e}")
+        return jsonify({'error': 'Artist not found'}), 404
 
-        function renderPlaylistSongs() {
-            currentPlaylistSongsContainer.innerHTML = '';
-            
-            if (currentPlaylistSongs.length === 0) {
-                currentPlaylistSongsContainer.innerHTML = `
-                    <div class="text-center py-8">
-                        <i class="fas fa-music text-4xl text-gray-400 mb-3"></i>
-                        <p class="text-gray-400">No songs in this playlist</p>
-                        <p class="text-gray-500 text-sm">Add songs from search results</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            currentPlaylistSongs.forEach(song => {
-                const songElement = createSongResultElement(song);
-                currentPlaylistSongsContainer.appendChild(songElement);
-            });
-        }
+@app.route('/api/library')
+def get_library():
+    """Get user library data"""
+    try:
+        if not user_authenticated:
+            return jsonify({
+                'library': {
+                    'songs': [],
+                    'artists': [],
+                    'albums': [],
+                    'playlists': []
+                },
+                'authenticated': False
+            })
+        
+        # For now, return empty library until we implement proper library functionality
+        return jsonify({
+            'library': {
+                'songs': songs_db,
+                'artists': artists_db,
+                'albums': [],
+                'playlists': playlists
+            },
+            'authenticated': True
+        })
+    except Exception as e:
+        print(f"Library error: {e}")
+        return jsonify({
+            'library': {
+                'songs': [],
+                'artists': [],
+                'albums': [],
+                'playlists': []
+            },
+            'authenticated': False
+        })
 
-        async function loadLibraryData() {
-            try {
-                const data = await apiCall('/api/library');
-                
-                // Load songs
-                librarySongs = data.library?.songs || [];
-                
-                // Load artists
-                libraryArtists = Object.entries(data.library?.artists || {})
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 10);
-                
-                // Update counts
-                songsCount.textContent = librarySongs.length;
-                artistsCount.textContent = libraryArtists.length;
-                
-                // Render songs
-                librarySongsContainer.innerHTML = '';
-                if (librarySongs.length > 0) {
-                    librarySongs.forEach(song => {
-                        const songElement = document.createElement('div');
-                        songElement.className = 'flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition';
-                        songElement.innerHTML = `
-                            <div class="flex items-center space-x-3">
-                                ${song.thumbnail ? 
-                                    `<img src="${song.thumbnail}" alt="${song.title}" class="w-10 h-10 rounded">` :
-                                    `<div class="w-10 h-10 rounded bg-purple-600 flex items-center justify-center">
-                                        <i class="fas fa-music"></i>
-                                    </div>`
-                                }
-                                <div class="min-w-0 flex-1">
-                                    <div class="font-medium text-ellipsis">${song.title}</div>
-                                    <div class="text-sm text-gray-300 text-ellipsis">${song.artist}</div>
-                                </div>
-                            </div>
-                            <button class="play-song-btn px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 transition" data-id="${song.id}">
-                                <i class="fas fa-play"></i>
-                            </button>
-                        `;
-                        librarySongsContainer.appendChild(songElement);
-                    });
-                    
-                    // Add event listeners to play buttons
-                    document.querySelectorAll('.play-song-btn').forEach(btn => {
-                        btn.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            const songId = btn.getAttribute('data-id');
-                            const song = librarySongs.find(s => s.id === songId);
-                            if (song) playSong(song);
-                        });
-                    });
-                } else {
-                    librarySongsContainer.innerHTML = '<p class="text-gray-400 text-center py-4">No songs in your library yet</p>';
-                }
-                
-                // Render artists
-                libraryArtistsContainer.innerHTML = '';
-                if (libraryArtists.length > 0) {
-                    libraryArtists.forEach(([artist, count]) => {
-                        const artistElement = document.createElement('div');
-                        artistElement.className = 'flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition';
-                        artistElement.innerHTML = `
-                            <div class="flex items-center space-x-3">
-                                <div class="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center">
-                                    <i class="fas fa-user"></i>
-                                </div>
-                                <div class="min-w-0 flex-1">
-                                    <div class="font-medium text-ellipsis">${artist}</div>
-                                    <div class="text-sm text-gray-300">${count} song${count !== 1 ? 's' : ''}</div>
-                                </div>
-                            </div>
-                            <button class="search-artist-btn px-3 py-1 rounded-lg glass-effect hover:bg-white/10 transition" data-artist="${artist}">
-                                <i class="fas fa-search"></i>
-                            </button>
-                        `;
-                        libraryArtistsContainer.appendChild(artistElement);
-                    });
-                    
-                    // Add event listeners to search buttons
-                    document.querySelectorAll('.search-artist-btn').forEach(btn => {
-                        btn.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            const artist = btn.getAttribute('data-artist');
-                            searchInput.value = artist;
-                            performSearch();
-                        });
-                    });
-                } else {
-                    libraryArtistsContainer.innerHTML = '<p class="text-gray-400 text-center py-4">No favorite artists yet</p>';
-                }
-                
-            } catch (error) {
-                console.error('Failed to load library data:', error);
-                showNotification('Failed to load library', 'error');
-            }
-        }
+@app.route('/api/authenticate', methods=['POST'])
+def authenticate():
+    """Authenticate with YouTube Music"""
+    global browser_json_content, user_authenticated
+    
+    data = request.get_json()
+    if not data or 'browserJson' not in data:
+        return jsonify({'success': False, 'error': 'No browser.json provided'})
+    
+    browser_json = data['browserJson']
+    
+    try:
+        # Validate the JSON
+        json.loads(browser_json)
+        
+        # Save the browser.json content
+        browser_json_content = browser_json
+        user_authenticated = True
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Authentication error: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
-        async function loadDownloadsData() {
-            try {
-                const data = await apiCall('/api/songs');
-                downloadsList.innerHTML = '';
-                
-                if (data.songs && data.songs.length > 0) {
-                    data.songs.forEach(song => {
-                        const downloadItem = document.createElement('div');
-                        downloadItem.className = 'glass-effect rounded-xl p-4 flex items-center justify-between';
-                        downloadItem.innerHTML = `
-                            <div class="flex items-center space-x-4">
-                                ${song.thumbnail ? 
-                                    `<img src="${song.thumbnail}" alt="${song.title}" class="w-12 h-12 rounded-lg">` :
-                                    `<div class="w-12 h-12 rounded-lg bg-purple-600 flex items-center justify-center">
-                                        <i class="fas fa-music"></i>
-                                    </div>`
-                                }
-                                <div class="min-w-0 flex-1">
-                                    <div class="font-bold text-ellipsis">${song.title}</div>
-                                    <div class="text-gray-300 text-ellipsis">${song.artist}</div>
-                                    <div class="text-sm text-gray-400">Downloaded: ${song.downloaded_at || 'Unknown'}</div>
-                                </div>
-                            </div>
-                            <div class="flex space-x-2">
-                                <button class="play-download-btn px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 transition" data-id="${song.id}">
-                                    <i class="fas fa-play"></i>
-                                </button>
-                                <button class="download-again-btn px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 transition" data-id="${song.id}" data-title="${song.title}" data-artist="${song.artist}">
-                                    <i class="fas fa-download"></i>
-                                </button>
-                            </div>
-                        `;
-                        downloadsList.appendChild(downloadItem);
-                    });
-                    
-                    // Add event listeners to play buttons
-                    document.querySelectorAll('.play-download-btn').forEach(btn => {
-                        btn.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            const songId = btn.getAttribute('data-id');
-                            const song = data.songs.find(s => s.id === songId);
-                            if (song) playSong(song);
-                        });
-                    });
-                    
-                    // Add event listeners to download-again buttons
-                    document.querySelectorAll('.download-again-btn').forEach(btn => {
-                        btn.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            const song = {
-                                id: btn.getAttribute('data-id'),
-                                title: btn.getAttribute('data-title'),
-                                artist: btn.getAttribute('data-artist')
-                            };
-                            directDownload(song);
-                        });
-                    });
-                } else {
-                    downloadsList.innerHTML = '<p class="text-gray-400 text-center py-8">No downloads yet</p>';
-                }
-            } catch (error) {
-                console.error('Failed to load downloads:', error);
-                showNotification('Failed to load downloads', 'error');
-            }
+@app.route('/api/export-data')
+def export_data():
+    """Export user data"""
+    try:
+        export_data = {
+            'songs': songs_db,
+            'artists': artists_db,
+            'search_history': search_history,
+            'playlists': playlists
         }
+        
+        # Create a temporary file with the export data
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(export_data, f, indent=2)
+            temp_file = f.name
+        
+        return send_file(temp_file, as_attachment=True, download_name='musicgrab_export.json')
+    except Exception as e:
+        print(f"Export error: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
-        // Search Functions
-        async function handleSearchInput() {
-            const query = searchInput.value.trim();
-            
-            if (query.length < 2) {
-                suggestions.classList.add('hidden');
-                return;
-            }
-            
-            try {
-                const data = await apiCall('/api/suggestions', {
-                    method: 'POST',
-                    body: JSON.stringify({ query })
-                });
-                
-                if (data.suggestions && data.suggestions.length > 0) {
-                    suggestionsList.innerHTML = '';
-                    data.suggestions.forEach(suggestion => {
-                        const suggestionItem = document.createElement('div');
-                        suggestionItem.className = 'p-2 rounded-lg hover:bg-white/10 cursor-pointer transition';
-                        suggestionItem.textContent = suggestion;
-                        suggestionItem.addEventListener('click', () => {
-                            searchInput.value = suggestion;
-                            suggestions.classList.add('hidden');
-                            performSearch();
-                        });
-                        suggestionsList.appendChild(suggestionItem);
-                    });
-                    suggestions.classList.remove('hidden');
-                } else {
-                    suggestions.classList.add('hidden');
-                }
-            } catch (error) {
-                suggestions.classList.add('hidden');
-            }
-        }
+@app.route('/api/import-data', methods=['POST'])
+def import_data():
+    """Import user data"""
+    global songs_db, artists_db, search_history, playlists
+    
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file provided'})
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'success': False, 'error': 'No file selected'})
+    
+    try:
+        data = json.load(file)
+        
+        # Update the global variables
+        if 'songs' in data:
+            songs_db = data['songs']
+        if 'artists' in data:
+            artists_db = data['artists']
+        if 'search_history' in data:
+            search_history = data['search_history']
+        if 'playlists' in data:
+            playlists = data['playlists']
+        
+        # Save the updated data
+        save_user_data()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Import error: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
-        async function performSearch() {
-            const query = searchInput.value.trim();
-            
-            if (!query) {
-                showNotification('Please enter a search term', 'error');
-                return;
-            }
-            
-            try {
-                showLoading(`Searching for "${query}"...`);
-                resultsTitle.textContent = `Results for "${query}"`;
-                
-                const data = await apiCall('/api/search', {
-                    method: 'POST',
-                    body: JSON.stringify({ query })
-                });
-                
-                searchResults = data;
-                renderSearchResults();
-                showSection('search');
-                showResultsTab('songs');
-                
-                // Set current playing context to search results
-                currentPlayingContext = {
-                    type: 'search',
-                    id: query,
-                    songs: data.songs || [],
-                    currentIndex: 0
-                };
-                
-                // Add to search history (frontend only)
-                if (!searchHistory.includes(query)) {
-                    searchHistory.unshift(query);
-                    if (searchHistory.length > 10) searchHistory.pop();
-                    loadSearchHistory();
-                }
-                
-            } catch (error) {
-                console.error('Search failed:', error);
-            } finally {
-                hideLoading();
-            }
-        }
-
-        function renderSearchResults() {
-            // Render songs
-            songsResults.innerHTML = '';
-            if (searchResults.songs && searchResults.songs.length > 0) {
-                searchResults.songs.forEach(song => {
-                    const songElement = createSongResultElement(song);
-                    songsResults.appendChild(songElement);
-                });
-            } else {
-                songsResults.innerHTML = '<p class="text-gray-400 text-center py-8">No songs found</p>';
-            }
-            
-            // Render artists
-            artistsResults.innerHTML = '';
-            if (searchResults.artists && searchResults.artists.length > 0) {
-                searchResults.artists.forEach(artist => {
-                    const artistElement = document.createElement('div');
-                    artistElement.className = 'glass-effect rounded-xl p-4 song-card text-center';
-                    artistElement.innerHTML = `
-                        ${artist.thumbnail ? 
-                            `<img src="${artist.thumbnail}" alt="${artist.name}" class="w-24 h-24 rounded-full mx-auto mb-3">` :
-                            `<div class="w-24 h-24 rounded-full bg-purple-600 flex items-center justify-center mx-auto mb-3">
-                                <i class="fas fa-user text-2xl"></i>
-                            </div>`
-                        }
-                        <h3 class="font-bold text-ellipsis">${artist.name}</h3>
-                        <p class="text-gray-300 text-sm">Artist</p>
-                        <button class="mt-3 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 transition w-full view-artist-btn" data-id="${artist.id}">
-                            View Artist
-                        </button>
-                    `;
-                    artistsResults.appendChild(artistElement);
-                });
-            } else {
-                artistsResults.innerHTML = '<p class="text-gray-400 text-center py-8">No artists found</p>';
-            }
-            
-            // Render albums
-            albumsResults.innerHTML = '';
-            if (searchResults.albums && searchResults.albums.length > 0) {
-                searchResults.albums.forEach(album => {
-                    const albumElement = document.createElement('div');
-                    albumElement.className = 'glass-effect rounded-xl p-4 song-card';
-                    albumElement.innerHTML = `
-                        ${album.thumbnail ? 
-                            `<img src="${album.thumbnail}" alt="${album.title}" class="w-full aspect-square rounded-lg mb-3">` :
-                            `<div class="w-full aspect-square rounded-lg bg-purple-600 flex items-center justify-center mb-3">
-                                <i class="fas fa-compact-disc text-3xl"></i>
-                            </div>`
-                        }
-                        <h3 class="font-bold text-ellipsis">${album.title}</h3>
-                        <p class="text-gray-300 text-sm text-ellipsis">${album.artist}</p>
-                        <p class="text-gray-400 text-xs">${album.year || ''}</p>
-                        <button class="mt-3 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 transition w-full view-album-btn" data-id="${album.id}">
-                            View Album
-                        </button>
-                    `;
-                    albumsResults.appendChild(albumElement);
-                });
-            } else {
-                albumsResults.innerHTML = '<p class="text-gray-400 text-center py-8">No albums found</p>';
-            }
-        }
-
-        function createSongResultElement(song) {
-            const element = document.createElement('div');
-            element.className = 'glass-effect rounded-xl p-4 flex items-center justify-between song-card';
-            element.innerHTML = `
-                <div class="flex items-center space-x-3 flex-1 min-w-0">
-                    ${song.thumbnail ? 
-                        `<img src="${song.thumbnail}" alt="${song.title}" class="w-12 h-12 rounded-lg flex-shrink-0">` :
-                        `<div class="w-12 h-12 rounded-lg bg-purple-600 flex items-center justify-center flex-shrink-0">
-                            <i class="fas fa-music"></i>
-                        </div>`
-                    }
-                    <div class="flex-1 min-w-0">
-                        <div class="font-bold text-sm text-ellipsis flex items-center">
-                            ${song.title}
-                            ${song.is_explicit ? '<span class="ml-1 px-1 bg-gray-700 text-xs rounded text-gray-300">E</span>' : ''}
-                        </div>
-                        <div class="text-gray-300 text-xs text-ellipsis">${song.artist}</div>
-                        <div class="text-gray-400 text-xs flex items-center space-x-2 mt-1">
-                            <span>${song.duration || '0:00'}</span>
-                            <span>•</span>
-                            <span>${song.views || 'No views'}</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="flex space-x-1 flex-shrink-0">
-                    <button class="play-btn p-2 rounded-lg bg-purple-600 hover:bg-purple-700 transition" data-id="${song.id}">
-                        <i class="fas fa-play text-xs"></i>
-                    </button>
-                    <button class="download-btn p-2 rounded-lg bg-green-600 hover:bg-green-700 transition" data-id="${song.id}">
-                        <i class="fas fa-download text-xs"></i>
-                    </button>
-                    <button class="add-to-playlist-btn p-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition" data-id="${song.id}">
-                        <i class="fas fa-plus text-xs"></i>
-                    </button>
-                </div>
-            `;
-            
-            // Add event listeners
-            element.querySelector('.play-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                playSong(song);
-            });
-            
-            element.querySelector('.download-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                directDownload(song);
-            });
-            
-            element.querySelector('.add-to-playlist-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                currentSong = song;
-                showAddToPlaylistModal();
-            });
-            
-            // Click anywhere on the card to play
-            element.addEventListener('click', () => {
-                playSong(song);
-            });
-            
-            return element;
-        }
-
-        function createSongCard(song) {
-            const card = document.createElement('div');
-            card.className = 'glass-effect rounded-xl p-3 song-card cursor-pointer';
-            card.innerHTML = `
-                ${song.thumbnail ? 
-                    `<img src="${song.thumbnail}" alt="${song.title}" class="w-full aspect-square rounded-lg mb-2 object-cover">` :
-                    `<div class="w-full aspect-square rounded-lg bg-purple-600 flex items-center justify-center mb-2">
-                        <i class="fas fa-music text-xl"></i>
-                    </div>`
-                }
-                <h3 class="font-bold text-sm text-ellipsis">${song.title}</h3>
-                <p class="text-gray-300 text-xs text-ellipsis">${song.artist}</p>
-                <div class="flex justify-between items-center mt-2">
-                    <span class="text-xs text-gray-400">${song.views || 'Popular'}</span>
-                    <button class="play-card-btn p-1 rounded-full bg-purple-600 hover:bg-purple-700 transition">
-                        <i class="fas fa-play text-xs"></i>
-                    </button>
-                </div>
-            `;
-            
-            card.addEventListener('click', (e) => {
-                if (!e.target.closest('.play-card-btn')) {
-                    playSong(song);
-                }
-            });
-            
-            card.querySelector('.play-card-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                playSong(song);
-            });
-            
-            return card;
-        }
-
-        // Player Functions
-        async function playSong(song) {
-            try {
-                showPlayerLoading(`Loading ${song.title}...`);
-                
-                // Stop current audio if playing
-                if (currentAudio) {
-                    currentAudio.pause();
-                    currentAudio = null;
-                }
-                
-                currentSong = song;
-                
-                // Update player UI immediately
-                playerTitle.textContent = song.title;
-                playerArtist.textContent = song.artist;
-                
-                if (song.thumbnail) {
-                    playerThumbnail.src = song.thumbnail;
-                    playerThumbnail.classList.remove('hidden');
-                } else {
-                    playerThumbnail.classList.add('hidden');
-                }
-                
-                // Show player
-                player.classList.remove('hidden');
-                
-                // Try to get direct stream URL
-                const streamData = await apiCall(`/api/stream/${song.id}`);
-                
-                if (streamData.success) {
-                    currentAudio = new Audio(streamData.streamUrl);
-                } else {
-                    // Fallback: Use proxy
-                    const proxyUrl = `/api/proxy-audio?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${song.id}`)}`;
-                    currentAudio = new Audio(proxyUrl);
-                }
-                
-                // Set up audio event listeners
-                currentAudio.addEventListener('loadedmetadata', () => {
-                    duration.textContent = formatTime(currentAudio.duration);
-                    hidePlayerLoading();
-                });
-                
-                currentAudio.addEventListener('timeupdate', () => {
-                    currentTime.textContent = formatTime(currentAudio.currentTime);
-                    const progress = (currentAudio.currentTime / currentAudio.duration) * 100;
-                    progressFill.style.width = `${progress}%`;
-                });
-                
-                currentAudio.addEventListener('ended', () => {
-                    isPlaying = false;
-                    playBtn.innerHTML = '<i class="fas fa-play text-xs"></i>';
-                    playNextSong(); // Auto-play next song
-                });
-                
-                currentAudio.addEventListener('error', () => {
-                    hidePlayerLoading();
-                    showNotification('Failed to play audio', 'error');
-                });
-                
-                // Play audio
-                await currentAudio.play();
-                isPlaying = true;
-                playBtn.innerHTML = '<i class="fas fa-pause text-xs"></i>';
-                
-            } catch (error) {
-                console.error('Playback failed:', error);
-                hidePlayerLoading();
-                showNotification('Playback failed', 'error');
-            }
-        }
-
-        function togglePlay() {
-            if (!currentAudio) return;
-            
-            if (isPlaying) {
-                currentAudio.pause();
-                isPlaying = false;
-                playBtn.innerHTML = '<i class="fas fa-play text-xs"></i>';
-            } else {
-                currentAudio.play();
-                isPlaying = true;
-                playBtn.innerHTML = '<i class="fas fa-pause text-xs"></i>';
-            }
-        }
-
-        async function playPreviousSong() {
-            if (!currentSong || !currentPlayingContext.songs.length) {
-                showNotification('No previous song', 'info');
-                return;
-            }
-            
-            try {
-                const data = await apiCall(`/api/previous-song/${currentSong.id}`);
-                if (data.previous_song) {
-                    playSong(data.previous_song);
-                } else {
-                    showNotification('No previous song', 'info');
-                }
-            } catch (error) {
-                console.error('Failed to get previous song:', error);
-                showNotification('No previous song', 'info');
-            }
-        }
-
-        async function playNextSong() {
-            if (!currentSong || !currentPlayingContext.songs.length) {
-                showNotification('No next song', 'info');
-                return;
-            }
-            
-            try {
-                const data = await apiCall(`/api/next-song/${currentSong.id}`);
-                if (data.next_song) {
-                    playSong(data.next_song);
-                } else {
-                    showNotification('No next song', 'info');
-                }
-            } catch (error) {
-                console.error('Failed to get next song:', error);
-                showNotification('No next song', 'info');
-            }
-        }
-
-        function seekAudio(e) {
-            if (!currentAudio) return;
-            
-            const progressBar = e.currentTarget;
-            const clickPosition = e.offsetX;
-            const progressBarWidth = progressBar.clientWidth;
-            const seekTime = (clickPosition / progressBarWidth) * currentAudio.duration;
-            
-            currentAudio.currentTime = seekTime;
-        }
-
-        function downloadCurrentSong() {
-            if (currentSong) {
-                directDownload(currentSong);
-            }
-        }
-
-        function formatTime(seconds) {
-            if (isNaN(seconds)) return '0:00';
-            
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-        }
-
-        // Download Functions
-        function directDownload(song) {
-            // This will download directly to your PC
-            const downloadUrl = `/api/direct-download/${song.id}`;
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-            link.download = `${song.artist} - ${song.title}.mp3`;
-            link.style.display = 'none';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            showNotification(`Downloading "${song.title}" to your computer...`, 'success');
-        }
-
-        // Playlist Functions
-        async function createNewPlaylist() {
-            const name = playlistNameInput.value.trim();
-            
-            if (!name) {
-                showNotification('Please enter a playlist name', 'error');
-                return;
-            }
-            
-            try {
-                const data = await apiCall('/api/playlists', {
-                    method: 'POST',
-                    body: JSON.stringify({ name })
-                });
-                
-                if (data.success) {
-                    playlistModal.classList.add('hidden');
-                    playlistNameInput.value = '';
-                    showNotification('Playlist created successfully!', 'success');
-                    loadPlaylists();
-                }
-            } catch (error) {
-                console.error('Failed to create playlist:', error);
-            }
-        }
-
-        async function addSongToPlaylist(playlistId, song) {
-            try {
-                const data = await apiCall(`/api/playlists/${playlistId}/songs`, {
-                    method: 'POST',
-                    body: JSON.stringify({ song })
-                });
-                
-                if (data.success) {
-                    addToPlaylistModal.classList.add('hidden');
-                    showNotification('Song added to playlist!', 'success');
-                    
-                    // Update current playlist if we're viewing it
-                    if (currentPlaylist && currentPlaylist.id === playlistId) {
-                        currentPlaylist.songs.push(song);
-                        renderPlaylistSongs();
-                    }
-                    
-                    // Update playlists
-                    loadPlaylists();
-                }
-            } catch (error) {
-                console.error('Failed to add song to playlist:', error);
-                showNotification('Failed to add song to playlist', 'error');
-            }
-        }
-
-        function showAddToPlaylistModal() {
-            if (!currentSong) {
-                showNotification('No song selected', 'error');
-                return;
-            }
-            
-            playlistsSelect.innerHTML = '';
-            
-            if (Object.keys(playlists).length === 0) {
-                playlistsSelect.innerHTML = '<p class="text-gray-400 text-center py-4">No playlists yet</p>';
-            } else {
-                Object.values(playlists).forEach(playlist => {
-                    const playlistOption = document.createElement('div');
-                    playlistOption.className = 'p-3 rounded-lg hover:bg-white/10 cursor-pointer transition mb-2';
-                    playlistOption.innerHTML = `
-                        <div class="flex justify-between items-center">
-                            <span class="text-ellipsis">${playlist.name}</span>
-                            <span class="text-gray-400 text-sm">${playlist.songs.length} songs</span>
-                        </div>
-                    `;
-                    playlistOption.addEventListener('click', () => addSongToPlaylist(playlist.id, currentSong));
-                    playlistsSelect.appendChild(playlistOption);
-                });
-            }
-            
-            addToPlaylistModal.classList.remove('hidden');
-        }
-
-        // Authentication Functions
-        async function submitAuthentication() {
-            const jsonContent = browserJson.value.trim();
-            
-            if (!jsonContent) {
-                showNotification('Please paste your browser.json content', 'error');
-                return;
-            }
-            
-            try {
-                showLoading('Authenticating...');
-                
-                const data = await apiCall('/api/authenticate', {
-                    method: 'POST',
-                    body: JSON.stringify({ browserJson: jsonContent })
-                });
-                
-                if (data.success) {
-                    showNotification('Successfully authenticated!', 'success');
-                    authModal.classList.add('hidden');
-                    authBtn.innerHTML = '<i class="fas fa-user-check mr-2"></i>Signed In';
-                    authBtnMobile.innerHTML = '<i class="fas fa-user-check"></i>';
-                    browserJson.value = '';
-                    
-                    // Reload home data to get personalized recommendations
-                    loadHomeData();
-                } else {
-                    throw new Error(data.error || 'Authentication failed');
-                }
-                
-            } catch (error) {
-                console.error('Authentication failed:', error);
-                showNotification(`Authentication failed: ${error.message}`, 'error');
-            } finally {
-                hideLoading();
-            }
-        }
-
-        // Data Management Functions
-        async function exportData() {
-            try {
-                showLoading('Preparing export...');
-                
-                const response = await fetch('/api/export-data');
-                if (!response.ok) throw new Error('Export failed');
-                
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'musicgrab_export.json';
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                
-                showNotification('Data exported successfully', 'success');
-                
-            } catch (error) {
-                console.error('Export failed:', error);
-                showNotification('Export failed', 'error');
-            } finally {
-                hideLoading();
-            }
-        }
-
-        async function importData(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            try {
-                showLoading('Importing data...');
-                
-                const formData = new FormData();
-                formData.append('file', file);
-                
-                const response = await fetch('/api/import-data', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (!response.ok) throw new Error('Import failed');
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showNotification('Data imported successfully', 'success');
-                    
-                    // Refresh all data
-                    loadHomeData();
-                    loadLibraryData();
-                    loadPlaylists();
-                    loadDownloadsData();
-                } else {
-                    throw new Error(data.error || 'Import failed');
-                }
-                
-            } catch (error) {
-                console.error('Import failed:', error);
-                showNotification(`Import failed: ${error.message}`, 'error');
-            } finally {
-                hideLoading();
-                // Reset file input
-                importFile.value = '';
-            }
-        }
-    </script>
-</body>
-</html>
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host='0.0.0.0', port=port, debug=False)
