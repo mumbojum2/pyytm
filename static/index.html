@@ -886,57 +886,70 @@
         }
 
         async function loadDownloadsData() {
-            try {
-                const data = await apiCall('/api/songs');
-                downloadsList.innerHTML = '';
-                
-                if (data.songs && data.songs.length > 0) {
-                    data.songs.forEach(song => {
-                        const downloadItem = document.createElement('div');
-                        downloadItem.className = 'glass-effect rounded-xl p-4 flex items-center justify-between';
-                        downloadItem.innerHTML = `
-                            <div class="flex items-center space-x-4">
-                                ${song.thumbnail ? 
-                                    `<img src="${song.thumbnail}" alt="${song.title}" class="w-12 h-12 rounded-lg">` :
-                                    `<div class="w-12 h-12 rounded-lg bg-purple-600 flex items-center justify-center">
-                                        <i class="fas fa-music"></i>
-                                    </div>`
-                                }
-                                <div>
-                                    <div class="font-bold">${song.title}</div>
-                                    <div class="text-gray-300">${song.artist}</div>
-                                    <div class="text-sm text-gray-400">Downloaded: ${song.downloaded_at || 'Unknown'}</div>
-                                </div>
-                            </div>
-                            <div class="flex space-x-2">
-                                <button class="play-download-btn px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 transition" data-id="${song.id}">
-                                    <i class="fas fa-play"></i>
-                                </button>
-                                <a href="/api/download-file/${song.id}" class="px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 transition">
-                                    <i class="fas fa-download"></i>
-                                </a>
-                            </div>
-                        `;
-                        downloadsList.appendChild(downloadItem);
-                    });
-                    
-                    // Add event listeners to play buttons
-                    document.querySelectorAll('.play-download-btn').forEach(btn => {
-                        btn.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            const songId = btn.getAttribute('data-id');
-                            const song = data.songs.find(s => s.id === songId);
-                            if (song) playSong(song);
-                        });
-                    });
-                } else {
-                    downloadsList.innerHTML = '<p class="text-gray-400 text-center py-8">No downloads yet</p>';
-                }
-            } catch (error) {
-                console.error('Failed to load downloads:', error);
-                showNotification('Failed to load downloads', 'error');
-            }
+    try {
+        const data = await apiCall('/api/songs');
+        downloadsList.innerHTML = '';
+        
+        if (data.songs && data.songs.length > 0) {
+            data.songs.forEach(song => {
+                const downloadItem = document.createElement('div');
+                downloadItem.className = 'glass-effect rounded-xl p-4 flex items-center justify-between';
+                downloadItem.innerHTML = `
+                    <div class="flex items-center space-x-4">
+                        ${song.thumbnail ? 
+                            `<img src="${song.thumbnail}" alt="${song.title}" class="w-12 h-12 rounded-lg">` :
+                            `<div class="w-12 h-12 rounded-lg bg-purple-600 flex items-center justify-center">
+                                <i class="fas fa-music"></i>
+                            </div>`
+                        }
+                        <div>
+                            <div class="font-bold">${song.title}</div>
+                            <div class="text-gray-300">${song.artist}</div>
+                            <div class="text-sm text-gray-400">Downloaded: ${song.downloaded_at || 'Unknown'}</div>
+                        </div>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button class="play-download-btn px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 transition" data-id="${song.id}">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button class="download-again-btn px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 transition" data-id="${song.id}" data-title="${song.title}" data-artist="${song.artist}">
+                            <i class="fas fa-download"></i>
+                        </button>
+                    </div>
+                `;
+                downloadsList.appendChild(downloadItem);
+            });
+            
+            // Add event listeners to play buttons
+            document.querySelectorAll('.play-download-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const songId = btn.getAttribute('data-id');
+                    const song = data.songs.find(s => s.id === songId);
+                    if (song) playSong(song);
+                });
+            });
+            
+            // Add event listeners to download-again buttons
+            document.querySelectorAll('.download-again-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const song = {
+                        id: btn.getAttribute('data-id'),
+                        title: btn.getAttribute('data-title'),
+                        artist: btn.getAttribute('data-artist')
+                    };
+                    directDownload(song);
+                });
+            });
+        } else {
+            downloadsList.innerHTML = '<p class="text-gray-400 text-center py-8">No downloads yet</p>';
         }
+    } catch (error) {
+        console.error('Failed to load downloads:', error);
+        showNotification('Failed to load downloads', 'error');
+    }
+}
 
         // Search Functions
         async function handleSearchInput() {
@@ -1416,5 +1429,6 @@ async function downloadSong(song) {
     </script>
 </body>
 </html>
+
 
 
