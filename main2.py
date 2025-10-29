@@ -1101,6 +1101,46 @@ def import_data():
         print(f"Import error: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/api/direct-download/<video_id>')
+def direct_download(video_id):
+    """Stream download directly to user's computer"""
+    try:
+        # Get video info
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'quiet': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
+            title = info.get('title', 'audio')
+            artist = info.get('uploader', 'Unknown Artist')
+            
+            # Clean filename
+            sanitized_title = "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip()
+            sanitized_artist = "".join(c for c in artist if c.isalnum() or c in (" ", "-", "_")).strip()
+            filename = f"{sanitized_artist} - {sanitized_title}.mp3"
+            
+            # Get direct audio URL
+            audio_url = info['url']
+            
+            # Stream directly to user's browser for download
+            response = requests.get(audio_url, stream=True, timeout=30)
+            
+            return Response(
+                response.iter_content(chunk_size=8192),
+                mimetype='audio/mpeg',
+                headers={
+                    'Content-Disposition': f'attachment; filename="{filename}"',
+                    'Content-Type': 'audio/mpeg'
+                }
+            )
+            
+    except Exception as e:
+        print(f"Direct download error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
