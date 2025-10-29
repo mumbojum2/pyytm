@@ -1,5 +1,5 @@
 # YouTube Music Downloader - "MusicGrab Pro"
-# Complete Flask backend with React frontend
+# ULTRA-FAST Flask Backend with Performance Optimizations
 
 import os
 import json
@@ -33,6 +33,14 @@ artists_db = {}
 search_history = []
 browser_json_content = ""
 user_authenticated = False
+
+# NEW: Performance optimizations
+search_cache = {}
+stream_cache = {}
+download_queue = []
+current_downloads = 0
+MAX_CONCURRENT_DOWNLOADS = 2
+CACHE_DURATION = 300  # 5 minutes
 
 # Load user data at startup
 def load_user_data():
@@ -90,7 +98,7 @@ def get_youtube_suggestions(query):
         }
 
         # OPTIMIZATION: Shorter timeout and connection pooling
-        response = requests.get(url, params=params, timeout=2.0)  # Reduced from 5s to 2s
+        response = requests.get(url, params=params, timeout=1.5)  # Reduced from 2s to 1.5s
         
         if response.status_code == 200:
             data = response.json()
@@ -183,57 +191,97 @@ def format_views(views):
     else:
         return f"{views:,} views"
 
+def get_cached_search(query):
+    """Get cached search results"""
+    now = time.time()
+    if query in search_cache:
+        data, timestamp = search_cache[query]
+        if now - timestamp < CACHE_DURATION:
+            return data
+    return None
+
+def cache_search(query, data):
+    """Cache search results"""
+    search_cache[query] = (data, time.time())
+
 def get_personalized_recommendations():
-    """Get personalized recommendations using browser.json"""
+    """Get FAST personalized recommendations"""
     global browser_json_content, user_authenticated
     
     if not user_authenticated or not browser_json_content:
-        return get_popular_recommendations()
+        return get_fast_popular_recommendations()
     
     try:
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            f.write(browser_json_content)
-            browser_file = f.name
+        # Fast path with timeout
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Recommendations timed out")
         
-        from ytmusicapi import YTMusic
-        ytmusic = YTMusic(browser_file)
+        # Set up timeout (Unix-like systems only)
+        try:
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(5)  # 5 second timeout
+        except (AttributeError, ValueError):
+            # Windows doesn't support SIGALRM, continue without timeout
+            pass
         
-        home_feed = ytmusic.get_home()
-        recommendations = []
-        
-        for shelf in home_feed[:8]:
-            for content in shelf.get('contents', [])[:6]:
-                if 'title' in content:
-                    video_id = content.get('videoId')
-                    if video_id:
-                        recommendations.append({
-                            'id': video_id,
-                            'title': content['title'],
-                            'artist': content.get('subtitle', 'YouTube Music'),
-                            'thumbnail': content['thumbnails'][-1]['url'] if content.get('thumbnails') else "",
-                            'type': 'song',
-                            'url': f"https://www.youtube.com/watch?v={video_id}",
-                            'views': 'Popular'
-                        })
-        
-        os.unlink(browser_file)
-        return recommendations[:20]
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                f.write(browser_json_content)
+                browser_file = f.name
+            
+            from ytmusicapi import YTMusic
+            ytmusic = YTMusic(browser_file)
+            
+            home_feed = ytmusic.get_home()
+            recommendations = []
+            
+            for shelf in home_feed[:6]:  # Limit shelves for speed
+                for content in shelf.get('contents', [])[:4]:  # Limit contents
+                    if 'title' in content:
+                        video_id = content.get('videoId')
+                        if video_id:
+                            recommendations.append({
+                                'id': video_id,
+                                'title': content['title'],
+                                'artist': content.get('subtitle', 'YouTube Music'),
+                                'thumbnail': content['thumbnails'][-1]['url'] if content.get('thumbnails') else "",
+                                'type': 'song',
+                                'url': f"https://www.youtube.com/watch?v={video_id}",
+                                'views': 'Popular'
+                            })
+            
+            os.unlink(browser_file)
+            # Cancel timeout if set
+            try:
+                signal.alarm(0)
+            except (AttributeError, ValueError):
+                pass
+            return recommendations[:15]  # Limit results
+            
+        except TimeoutError:
+            print("Recommendations timed out, using fallback")
+            return get_fast_popular_recommendations()
         
     except Exception as e:
         print(f"Personalized recommendations error: {e}")
-        return get_popular_recommendations()
+        # Cancel timeout if set
+        try:
+            signal.alarm(0)
+        except (AttributeError, ValueError):
+            pass
+        return get_fast_popular_recommendations()
 
-def get_popular_recommendations():
-    """Get popular music when not authenticated - FIXED"""
+def get_fast_popular_recommendations():
+    """Get popular music FAST with fallback"""
     try:
         from ytmusicapi import YTMusic
         yt = YTMusic()
         
-        # Get trending music directly
-        search_results = yt.search('trending music', filter='songs', limit=12)
+        # Direct trending search with limit
+        search_results = yt.search('popular music', filter='songs', limit=8)
         recommendations = []
         
-        for track in search_results:
+        for track in search_results[:8]:  # Limit results
             try:
                 video_id = track.get('videoId')
                 if video_id:
@@ -251,12 +299,12 @@ def get_popular_recommendations():
                         'thumbnail': thumbnail_url,
                         'type': 'song',
                         'url': f"https://www.youtube.com/watch?v={video_id}",
-                        'views': 'Trending'
+                        'views': 'Popular'
                     })
-            except Exception as track_e:
+            except Exception:
                 continue
         
-        return recommendations[:12] if recommendations else get_fallback_recommendations()
+        return recommendations if recommendations else get_fallback_recommendations()
     except Exception as e:
         print(f"Popular recommendations error: {e}")
         return get_fallback_recommendations()
@@ -270,7 +318,7 @@ def get_fallback_recommendations():
     ]
 
 def fast_youtube_search(query, max_results=10):
-    print(f"🔍 FAST Searching for: '{query}'")
+    print(f"🔍 ULTRA-FAST Searching for: '{query}'")
     if not query:
         return {'songs': [], 'artists': [], 'albums': []}
 
@@ -282,93 +330,102 @@ def fast_youtube_search(query, max_results=10):
         artists = []
         albums = []
         
-        try:
-            # Search for songs
-            songs_results = yt.search(query, filter='songs', limit=max_results)
-            print(f"✅ Found {len(songs_results)} songs")
-            
-            for song in songs_results:
-                try:
-                    video_id = song.get('videoId', '')
-                    song_artists = song.get('artists', [])
-                    artists_str = ", ".join([artist.get('name', 'Unknown') for artist in song_artists]) if song_artists else 'Unknown Artist'
-                    
-                    thumbnail_url = ""
-                    if song.get('thumbnails'):
-                        thumbnail_url = song['thumbnails'][-1]['url'] if len(song['thumbnails']) > 1 else song['thumbnails'][0]['url']
-                    
-                    # Get view count - FIXED
-                    raw_views = song.get('views', '')
-                    views = parse_view_count(raw_views)
-                    
-                    songs.append({
-                        'id': video_id,
-                        'title': song.get('title', 'Unknown Title'),
-                        'url': f"https://www.youtube.com/watch?v={video_id}" if video_id else '',
-                        'duration': song.get('duration', '0:00'),
-                        'artist': artists_str,
-                        'album': song.get('album', {}).get('name', '') if song.get('album') else '',
-                        'thumbnail': thumbnail_url,
-                        'views': format_views(views),  # FIXED: Now using the function
-                        'is_explicit': any(word in song.get('title', '').lower() for word in ['explicit', 'clean']),
-                        'raw_views': views
-                    })
-                except Exception as song_error:
-                    print(f"⚠️ Error processing song: {song_error}")
-                    continue
-                    
-        except Exception as songs_error:
-            print(f"❌ Songs search failed: {songs_error}")
+        # PARALLEL searching for maximum speed
+        def search_songs():
+            nonlocal songs
+            try:
+                songs_results = yt.search(query, filter='songs', limit=max_results)
+                for song in songs_results:
+                    try:
+                        video_id = song.get('videoId', '')
+                        if not video_id:
+                            continue
+                            
+                        song_artists = song.get('artists', [])
+                        artists_str = ", ".join([artist.get('name', 'Unknown') for artist in song_artists]) if song_artists else 'Unknown Artist'
+                        
+                        thumbnail_url = ""
+                        if song.get('thumbnails'):
+                            thumbnail_url = song['thumbnails'][-1]['url'] if len(song['thumbnails']) > 1 else song['thumbnails'][0]['url']
+                        
+                        raw_views = song.get('views', '')
+                        views = parse_view_count(raw_views)
+                        
+                        songs.append({
+                            'id': video_id,
+                            'title': song.get('title', 'Unknown Title'),
+                            'url': f"https://www.youtube.com/watch?v={video_id}",
+                            'duration': song.get('duration', '0:00'),
+                            'artist': artists_str,
+                            'album': song.get('album', {}).get('name', '') if song.get('album') else '',
+                            'thumbnail': thumbnail_url,
+                            'views': format_views(views),
+                            'is_explicit': any(word in song.get('title', '').lower() for word in ['explicit', 'clean']),
+                            'raw_views': views
+                        })
+                    except Exception as song_error:
+                        continue
+            except Exception:
+                pass
         
-        try:
-            artists_results = yt.search(query, filter='artists', limit=4)
-            print(f"✅ Found {len(artists_results)} artists")
-            
-            for artist in artists_results:
-                try:
-                    artists.append({
-                        'id': artist.get('browseId', ''),
-                        'name': artist.get('artist', 'Unknown Artist'),
-                        'thumbnail': artist['thumbnails'][-1]['url'] if artist.get('thumbnails') else "",
-                        'type': 'artist'
-                    })
-                except Exception as artist_error:
-                    print(f"⚠️ Error processing artist: {artist_error}")
-                    continue
-                    
-        except Exception as artists_error:
-            print(f"❌ Artists search failed: {artists_error}")
+        def search_artists():
+            nonlocal artists
+            try:
+                artists_results = yt.search(query, filter='artists', limit=4)
+                for artist in artists_results:
+                    try:
+                        artists.append({
+                            'id': artist.get('browseId', ''),
+                            'name': artist.get('artist', 'Unknown Artist'),
+                            'thumbnail': artist['thumbnails'][-1]['url'] if artist.get('thumbnails') else "",
+                            'type': 'artist'
+                        })
+                    except Exception:
+                        continue
+            except Exception:
+                pass
         
-        try:
-            albums_results = yt.search(query, filter='albums', limit=4)
-            print(f"✅ Found {len(albums_results)} albums")
-            
-            for album in albums_results:
-                try:
-                    albums.append({
-                        'id': album.get('browseId', ''),
-                        'title': album.get('title', 'Unknown Album'),
-                        'artist': album.get('artists', [{}])[0].get('name', '') if album.get('artists') else 'Unknown Artist',
-                        'year': album.get('year', ''),
-                        'thumbnail': album['thumbnails'][-1]['url'] if album.get('thumbnails') else "",
-                        'type': 'album'
-                    })
-                except Exception as album_error:
-                    print(f"⚠️ Error processing album: {album_error}")
-                    continue
-                    
-        except Exception as albums_error:
-            print(f"❌ Albums search failed: {albums_error}")
+        def search_albums():
+            nonlocal albums
+            try:
+                albums_results = yt.search(query, filter='albums', limit=4)
+                for album in albums_results:
+                    try:
+                        albums.append({
+                            'id': album.get('browseId', ''),
+                            'title': album.get('title', 'Unknown Album'),
+                            'artist': album.get('artists', [{}])[0].get('name', '') if album.get('artists') else 'Unknown Artist',
+                            'year': album.get('year', ''),
+                            'thumbnail': album['thumbnails'][-1]['url'] if album.get('thumbnails') else "",
+                            'type': 'album'
+                        })
+                    except Exception:
+                        continue
+            except Exception:
+                pass
         
-        print(f"🎯 FAST Search complete: {len(songs)} songs, {len(artists)} artists, {len(albums)} albums")
+        # Run searches in parallel threads
+        threads = [
+            threading.Thread(target=search_songs),
+            threading.Thread(target=search_artists),
+            threading.Thread(target=search_albums)
+        ]
+        
+        for thread in threads:
+            thread.start()
+        
+        for thread in threads:
+            thread.join(timeout=5)  # 5 second timeout for each
+        
+        print(f"🎯 ULTRA-FAST Search complete: {len(songs)} songs, {len(artists)} artists, {len(albums)} albums")
         return {
-            'songs': songs,
+            'songs': songs[:max_results],
             'artists': artists,
             'albums': albums
         }
         
     except Exception as e:
-        print(f"❌ Search function failed completely: {e}")
+        print(f"❌ Search function failed: {e}")
         return {'songs': [], 'artists': [], 'albums': []}
 
 def add_metadata_to_file(filepath, title, artist, album, thumbnail_url=None):
@@ -394,7 +451,7 @@ def add_metadata_to_file(filepath, title, artist, album, thumbnail_url=None):
         # Add album art
         if thumbnail_url:
             try:
-                response = requests.get(thumbnail_url, timeout=10)
+                response = requests.get(thumbnail_url, timeout=5)  # Reduced timeout
                 if response.status_code == 200:
                     # Remove existing APIC frames
                     for key in list(audio.keys()):
@@ -417,33 +474,201 @@ def add_metadata_to_file(filepath, title, artist, album, thumbnail_url=None):
         print(f"⚠️ Metadata error: {e}")
 
 def get_audio_stream_url(video_id):
-    """Get direct audio stream URL for native playback"""
+    """Get direct audio stream URL for INSTANT playback"""
     try:
+        # ULTRA-FAST stream extraction
         ydl_opts = {
             'format': 'bestaudio/best',
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
+            'socket_timeout': 10,
+            'noplaylist': True,
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
             
-            # Get the best audio format URL
+            # Prioritize formats for fastest streaming
             if 'url' in info:
                 return info['url']
             elif 'formats' in info:
-                # Find the best audio format
+                # Find formats optimized for streaming
                 audio_formats = [f for f in info['formats'] if f.get('vcodec') == 'none' and f.get('acodec') != 'none']
+                
+                # Prefer m4a for faster streaming
+                m4a_formats = [f for f in audio_formats if f.get('ext') == 'm4a']
+                if m4a_formats:
+                    m4a_formats.sort(key=lambda x: x.get('abr', 0) or 0, reverse=True)
+                    return m4a_formats[0]['url']
+                
+                # Fallback to any audio format
                 if audio_formats:
-                    # Prefer formats with higher quality
-                    audio_formats.sort(key=lambda x: x.get('quality', 0) or 0, reverse=True)
+                    audio_formats.sort(key=lambda x: x.get('abr', 0) or 0, reverse=True)
                     return audio_formats[0]['url']
             
         return None
     except Exception as e:
         print(f"Audio stream error: {e}")
         return None
+
+# NEW: Download queue system
+def process_download_queue():
+    """Process download queue in background"""
+    global current_downloads
+    
+    if not download_queue or current_downloads >= MAX_CONCURRENT_DOWNLOADS:
+        return
+    
+    # Get next download
+    download_item = download_queue.pop(0)
+    current_downloads += 1
+    
+    # Start download in background thread
+    thread = threading.Thread(target=process_single_download, args=(download_item,))
+    thread.daemon = True
+    thread.start()
+
+def process_single_download(download_item):
+    """Process a single download item"""
+    global current_downloads
+    
+    try:
+        # Update status to downloading
+        download_item['status'] = 'downloading'
+        
+        # Call the download function with fast mode
+        result = download_internal(
+            download_item['video_id'],
+            download_item['title'],
+            download_item['artist'],
+            download_item['album'],
+            download_item['thumbnail'],
+            download_item['format'],
+            fast_mode=download_item.get('fast', True)
+        )
+        
+        # Update status based on result
+        if result.get('status') == 'success':
+            download_item['status'] = 'completed'
+            download_item['filename'] = result.get('filename')
+        else:
+            download_item['status'] = 'failed'
+            download_item['error'] = result.get('error')
+            
+    except Exception as e:
+        download_item['status'] = 'failed'
+        download_item['error'] = str(e)
+    finally:
+        current_downloads -= 1
+        # Process next in queue
+        process_download_queue()
+
+def download_internal(video_id, title, artist, album, thumbnail_url, format, fast_mode=False):
+    """Internal download function with fast mode support"""
+    # Clean filename
+    sanitized_title = "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip()
+    sanitized_artist = "".join(c for c in artist if c.isalnum() or c in (" ", "-", "_")).strip()
+    filename = f"{sanitized_artist} - {sanitized_title}.mp3"
+    file_path = os.path.join(DOWNLOAD_DIR, filename)
+
+    # Check if file exists (cache hit)
+    if os.path.exists(file_path):
+        print(f"✅ Cache hit for {filename}")
+        # Only add metadata if not in fast mode
+        if not fast_mode:
+            add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
+        songs_db.append({
+            'id': video_id,
+            'title': title,
+            'artist': artist,
+            'album': album,
+            'filename': filename,
+            'thumbnail': thumbnail_url,
+            'downloaded_at': time.strftime('%Y-%m-%d %H:%M:%S')
+        })
+        artists_db[artist] = artists_db.get(artist, 0) + 1
+        save_user_data()
+        return {
+            'status': 'success',
+            'downloadUrl': f"/downloads/{filename}",
+            'filename': filename
+        }
+
+    # ULTRA-FAST download settings
+    if fast_mode:
+        # MINIMAL settings for maximum speed
+        ydl_opts = {
+            'format': 'bestaudio[filesize<50M]',  # Limit file size for speed
+            'outtmpl': file_path.replace('.mp3', ''),
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '128',  # Lower quality = faster
+            }],
+            'writethumbnail': False,  # Skip thumbnail
+            'embedthumbnail': False,  # Skip embedding
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            'nooverwrites': True,
+            'noprogress': True,
+            'socket_timeout': 30,
+            'retries': 3,
+        }
+    else:
+        # Standard fast settings
+        ydl_opts = {
+            'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio',
+            'outtmpl': file_path.replace('.mp3', '.%(ext)s'),
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'writethumbnail': True,
+            'embedthumbnail': True,
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            'socket_timeout': 30,
+        }
+
+    try:
+        print(f"🚀 Starting {'FAST ' if fast_mode else ''}download for: {title}")
+        start_time = time.time()
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+        
+        download_time = time.time() - start_time
+        print(f"✅ Downloaded {filename} in {download_time:.1f} seconds")
+
+        # Only add metadata if not in fast mode
+        if not fast_mode:
+            add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
+
+        # Update user data
+        songs_db.append({
+            'id': video_id,
+            'title': title,
+            'artist': artist,
+            'album': album,
+            'filename': filename,
+            'thumbnail': thumbnail_url,
+            'downloaded_at': time.strftime('%Y-%m-%d %H:%M:%S')
+        })
+        artists_db[artist] = artists_db.get(artist, 0) + 1
+        save_user_data()
+
+        return {
+            'status': 'success',
+            'downloadUrl': f"/downloads/{filename}",
+            'filename': filename
+        }
+    except Exception as e:
+        print(f"Download error: {e}")
+        return {'error': str(e)}
 
 # Load user data at startup
 load_user_data()
@@ -487,8 +712,18 @@ def search():
         return jsonify({'error': 'No query provided'}), 400
 
     try:
+        # Check cache first
+        cached_results = get_cached_search(query)
+        if cached_results:
+            print(f"✅ CACHE HIT for: '{query}'")
+            return jsonify(cached_results)
+        
         print(f"🔍 API Search called for: '{query}'")
         results = fast_youtube_search(query, 10)
+        
+        # Cache the results
+        cache_search(query, results)
+        
         print(f"✅ API Search completed for: '{query}'")
         return jsonify(results)
     except Exception as e:
@@ -598,7 +833,74 @@ def get_views(video_id):
         print(f"View count error for {video_id}: {e}")
         return jsonify({'views': 0, 'error': str(e)})
 
-# FIXED: Add the missing play-song route
+# NEW: Download queue endpoints
+@app.route('/api/queue-download', methods=['POST'])
+def queue_download():
+    """Add download to queue"""
+    data = request.get_json()
+    video_id = data.get('videoId')
+    title = data.get('title', 'Unknown')
+    artist = data.get('artist', 'Unknown')
+    
+    if not video_id:
+        return jsonify({'error': 'No videoId provided'}), 400
+    
+    # Add to queue
+    download_item = {
+        'video_id': video_id,
+        'title': title,
+        'artist': artist,
+        'album': data.get('album', ''),
+        'thumbnail': data.get('thumbnail', ''),
+        'format': data.get('format', 'mp3'),
+        'fast': data.get('fast', True),
+        'queued_at': time.time(),
+        'status': 'queued'
+    }
+    
+    download_queue.append(download_item)
+    
+    # Start processing if not already running
+    if current_downloads < MAX_CONCURRENT_DOWNLOADS:
+        process_download_queue()
+    
+    return jsonify({
+        'status': 'queued',
+        'position': len(download_queue),
+        'message': f'"{title}" added to download queue'
+    })
+
+@app.route('/api/download-status')
+def download_status():
+    """Get current download status"""
+    return jsonify({
+        'queue': download_queue,
+        'current_downloads': current_downloads,
+        'active_downloads': [item for item in download_queue if item.get('status') in ['downloading']]
+    })
+
+# Original download endpoint (kept for compatibility)
+@app.route('/api/download', methods=['POST'])
+def download():
+    data = request.get_json()
+    video_id = data.get('videoId')
+    title = data.get('title', 'Unknown')
+    artist = data.get('artist', 'Unknown')
+    album = data.get('album', '')
+    thumbnail_url = data.get('thumbnail', '')
+    format = data.get('format', 'mp3')
+    fast_mode = data.get('fast', False)
+
+    if not video_id:
+        return jsonify({'error': 'No videoId provided'}), 400
+
+    result = download_internal(video_id, title, artist, album, thumbnail_url, format, fast_mode)
+    
+    if 'error' in result:
+        return jsonify({'error': result['error']}), 500
+    else:
+        return jsonify(result)
+
 @app.route('/api/play-song/<song_id>')
 def play_song(song_id):
     """Serve song file for playback"""
@@ -611,99 +913,6 @@ def play_song(song_id):
         return jsonify({'error': 'File not found'}), 404
         
     return send_file(filepath)
-
-@app.route('/api/download', methods=['POST'])
-def download():
-    data = request.get_json()
-    video_id = data.get('videoId')
-    title = data.get('title', 'Unknown')
-    artist = data.get('artist', 'Unknown')
-    album = data.get('album', '')
-    thumbnail_url = data.get('thumbnail', '')
-    format = data.get('format', 'mp3')
-
-    if not video_id:
-        return jsonify({'error': 'No videoId provided'}), 400
-
-    # Clean filename
-    sanitized_title = "".join(c for c in title if c.isalnum() or c in (" ", "-", "_")).strip()
-    sanitized_artist = "".join(c for c in artist if c.isalnum() or c in (" ", "-", "_")).strip()
-    filename = f"{sanitized_artist} - {sanitized_title}.mp3"
-    file_path = os.path.join(DOWNLOAD_DIR, filename)
-
-    # Check if file exists (cache hit)
-    if os.path.exists(file_path):
-        print(f"✅ Cache hit for {filename}")
-        add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
-        songs_db.append({
-            'id': video_id,
-            'title': title,
-            'artist': artist,
-            'album': album,
-            'filename': filename,
-            'thumbnail': thumbnail_url,
-            'downloaded_at': time.strftime('%Y-%m-%d %H:%M:%S')
-        })
-        artists_db[artist] = artists_db.get(artist, 0) + 1
-        save_user_data()
-        return jsonify({
-            'status': 'success',
-            'downloadUrl': f"/downloads/{filename}",
-            'filename': filename
-        })
-
-    # ULTRA-FAST download settings
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': file_path.replace('.mp3', '.%(ext)s'),
-        'postprocessors': [
-            {
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }
-        ],
-        'writethumbnail': True,
-        'embedthumbnail': True,
-        'noplaylist': True,
-        'quiet': True,
-        'no_warnings': True,
-    }
-
-    try:
-        print(f"🚀 Starting download for: {title}")
-        start_time = time.time()
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
-        
-        download_time = time.time() - start_time
-        print(f"✅ Downloaded {filename} in {download_time:.1f} seconds")
-
-        # Force metadata update
-        add_metadata_to_file(file_path, title, artist, album, thumbnail_url)
-
-        # Update user data
-        songs_db.append({
-            'id': video_id,
-            'title': title,
-            'artist': artist,
-            'album': album,
-            'filename': filename,
-            'thumbnail': thumbnail_url,
-            'downloaded_at': time.strftime('%Y-%m-%d %H:%M:%S')
-        })
-        artists_db[artist] = artists_db.get(artist, 0) + 1
-        save_user_data()
-
-        return jsonify({
-            'status': 'success',
-            'downloadUrl': f"/downloads/{filename}",
-            'filename': filename
-        })
-    except Exception as e:
-        print(f"Download error: {e}")
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/songs')
 def get_songs():
@@ -758,8 +967,6 @@ def debug_suggestions():
         'suggestions_count': len(suggestions),
         'suggestions_type': str(type(suggestions))
     })
-
-# Add these routes to your main2.py file
 
 @app.route('/api/artist/<artist_id>')
 def get_artist(artist_id):
@@ -897,12 +1104,3 @@ def import_data():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
-
-
-
-
-
-
-
-
