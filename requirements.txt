@@ -4,5 +4,4 @@ requests==2.31.0
 yt-dlp==2023.11.16
 ytmusicapi>=1.11.0
 mutagen==1.47.0
-
-
+gunicorn==21.2.0
