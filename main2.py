@@ -625,7 +625,7 @@ def download_internal(video_id, title, artist, album, thumbnail_url, format, fas
             'nooverwrites': True,
             'noprogress': True,
             'socket_timeout': 30,
-            '--cookies', 'cookies.txt',
+            '--cookies': 'cookies.txt',
             'retries': 3,
         }
     else:
@@ -643,7 +643,7 @@ def download_internal(video_id, title, artist, album, thumbnail_url, format, fas
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
-            '--cookies', 'cookies.txt',
+            '--cookies': 'cookies.txt',
             'socket_timeout': 30,
         }
 
@@ -1347,4 +1347,5 @@ def import_data():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
