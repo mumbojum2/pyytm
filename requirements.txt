@@ -1,8 +1,9 @@
 Flask==2.3.3
 flask-cors==4.0.0
 requests==2.31.0
-yt-dlp==2025.11.1  # UPDATE TO LATEST VERSION
+yt-dlp==2025.11.1.232827.dev0
 ytmusicapi>=1.11.0
 mutagen==1.47.0
 gunicorn==21.2.0
+
 
